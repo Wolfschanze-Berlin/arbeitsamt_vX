@@ -36,3 +36,9 @@ next-env.d.ts
 
 # Tauri
 target/
+target/rust-analyzer/flycheck0/stderr
+target/rust-analyzer/flycheck0/stdout
+
+# verrueckt-task
+.claude/*.local.md
+.claude/verrueckt-metadata.json
