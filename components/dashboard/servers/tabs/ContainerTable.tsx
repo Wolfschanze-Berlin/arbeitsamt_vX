@@ -7,12 +7,30 @@ import {
   ArrowUpDown,
   ChevronDown,
   ChevronRight,
+  Info,
   Loader2,
+  Play,
+  RotateCw,
+  Square,
 } from "lucide-react";
 
 import { tauriInvoke } from "@/lib/tauri";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { JsonViewer } from "@/components/dashboard/servers/tabs/JsonViewer";
 import {
   Table,
   TableBody,
@@ -47,11 +65,14 @@ interface ContainerStats {
   pids: number;
 }
 
+type DockerAction = "start" | "stop" | "restart";
+
 interface ContainerTableProps {
   sessionId: string;
   containers: ContainerInfo[];
   statsMap: Map<string, ContainerStats>;
   filter: string;
+  onActionComplete?: () => void;
 }
 
 type SortField = "name" | "image" | "state" | "cpu_pct" | "mem_usage_mb" | "net_io" | "status";
@@ -111,11 +132,14 @@ function getSortValue(
 // Component
 // ---------------------------------------------------------------------------
 
-function ContainerTable({ sessionId, containers, statsMap, filter }: ContainerTableProps) {
+function ContainerTable({ sessionId, containers, statsMap, filter, onActionComplete }: ContainerTableProps) {
   const [expandedRows, setExpandedRows] = useState<Map<string, string | null>>(new Map());
   const [loadingLogs, setLoadingLogs] = useState<Set<string>>(new Set());
   const [sortField, setSortField] = useState<SortField>("name");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
+  const [actionLoading, setActionLoading] = useState<Map<string, DockerAction>>(new Map());
+  const [inspectData, setInspectData] = useState<{ name: string; json: string } | null>(null);
+  const [inspectLoading, setInspectLoading] = useState<string | null>(null);
 
   // -----------------------------------------------------------------------
   // Filter
@@ -211,6 +235,55 @@ function ContainerTable({ sessionId, containers, statsMap, filter }: ContainerTa
   );
 
   // -----------------------------------------------------------------------
+  // Docker action (start / stop / restart)
+  // -----------------------------------------------------------------------
+
+  const handleAction = useCallback(
+    async (containerName: string, action: DockerAction) => {
+      setActionLoading((prev) => new Map(prev).set(containerName, action));
+      try {
+        await tauriInvoke<string>("ssh_docker_action", {
+          sessionId,
+          containerName,
+          action,
+        });
+        onActionComplete?.();
+      } catch {
+        // Errors are non-fatal — the next auto-refresh will show the real state
+      } finally {
+        setActionLoading((prev) => {
+          const next = new Map(prev);
+          next.delete(containerName);
+          return next;
+        });
+      }
+    },
+    [sessionId, onActionComplete],
+  );
+
+  // -----------------------------------------------------------------------
+  // Docker inspect
+  // -----------------------------------------------------------------------
+
+  const handleInspect = useCallback(
+    async (containerName: string) => {
+      setInspectLoading(containerName);
+      try {
+        const json = await tauriInvoke<string>("ssh_docker_inspect", {
+          sessionId,
+          containerName,
+        });
+        setInspectData({ name: containerName, json });
+      } catch {
+        setInspectData({ name: containerName, json: "[Failed to fetch inspect data]" });
+      } finally {
+        setInspectLoading(null);
+      }
+    },
+    [sessionId],
+  );
+
+  // -----------------------------------------------------------------------
   // Sort header helper
   // -----------------------------------------------------------------------
 
@@ -253,47 +326,68 @@ function ContainerTable({ sessionId, containers, statsMap, filter }: ContainerTa
   // Render
   // -----------------------------------------------------------------------
 
-  const colCount = 8;
+  const colCount = 9;
 
   return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead className="w-8" />
-          <SortableHead field="name">Name</SortableHead>
-          <SortableHead field="image">Image</SortableHead>
-          <SortableHead field="state">State</SortableHead>
-          <SortableHead field="cpu_pct">CPU%</SortableHead>
-          <SortableHead field="mem_usage_mb">Memory</SortableHead>
-          <SortableHead field="net_io">Net I/O</SortableHead>
-          <SortableHead field="status">Status</SortableHead>
-          <TableHead>Ports</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {sorted.map((container) => {
-          const stats = statsMap.get(container.name);
-          const isRunning = container.state.toLowerCase() === "running";
-          const isExpanded = expandedRows.has(container.name);
-          const logs = expandedRows.get(container.name);
-          const isLoading = loadingLogs.has(container.name);
+    <>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead className="w-8" />
+            <SortableHead field="name">Name</SortableHead>
+            <SortableHead field="image">Image</SortableHead>
+            <SortableHead field="state">State</SortableHead>
+            <SortableHead field="cpu_pct">CPU%</SortableHead>
+            <SortableHead field="mem_usage_mb">Memory</SortableHead>
+            <SortableHead field="net_io">Net I/O</SortableHead>
+            <SortableHead field="status">Status</SortableHead>
+            <TableHead>Ports</TableHead>
+            <TableHead className="w-28 text-right">Actions</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {sorted.map((container) => {
+            const stats = statsMap.get(container.name);
+            const isRunning = container.state.toLowerCase() === "running";
+            const isExpanded = expandedRows.has(container.name);
+            const logs = expandedRows.get(container.name);
+            const isLoading = loadingLogs.has(container.name);
+            const currentAction = actionLoading.get(container.name);
+            const isInspecting = inspectLoading === container.name;
 
-          return (
-            <ContainerRow
-              key={container.id}
-              container={container}
-              stats={stats}
-              isRunning={isRunning}
-              isExpanded={isExpanded}
-              logs={logs}
-              isLoading={isLoading}
-              colCount={colCount}
-              onToggle={() => toggleRow(container.name)}
-            />
-          );
-        })}
-      </TableBody>
-    </Table>
+            return (
+              <ContainerRow
+                key={container.id}
+                container={container}
+                stats={stats}
+                isRunning={isRunning}
+                isExpanded={isExpanded}
+                logs={logs}
+                isLoading={isLoading}
+                colCount={colCount}
+                currentAction={currentAction}
+                isInspecting={isInspecting}
+                onToggle={() => toggleRow(container.name)}
+                onAction={(action) => handleAction(container.name, action)}
+                onInspect={() => handleInspect(container.name)}
+              />
+            );
+          })}
+        </TableBody>
+      </Table>
+
+      {/* Inspect Dialog */}
+      <Dialog open={inspectData !== null} onOpenChange={() => setInspectData(null)}>
+        <DialogContent className="max-h-[80vh] max-w-3xl overflow-hidden">
+          <DialogHeader>
+            <DialogTitle>Inspect: {inspectData?.name}</DialogTitle>
+          </DialogHeader>
+          {inspectData?.json ? (
+            <JsonViewer json={inspectData.json} className="max-h-[60vh]" />
+          ) : null}
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
@@ -309,7 +403,11 @@ function ContainerRow({
   logs,
   isLoading,
   colCount,
+  currentAction,
+  isInspecting,
   onToggle,
+  onAction,
+  onInspect,
 }: {
   container: ContainerInfo;
   stats: ContainerStats | undefined;
@@ -318,8 +416,14 @@ function ContainerRow({
   logs: string | null | undefined;
   isLoading: boolean;
   colCount: number;
+  currentAction?: DockerAction;
+  isInspecting: boolean;
   onToggle: () => void;
+  onAction: (action: DockerAction) => void;
+  onInspect: () => void;
 }) {
+  const isBusy = !!currentAction;
+
   return (
     <>
       <TableRow
@@ -358,6 +462,89 @@ function ContainerRow({
         <TableCell className="text-muted-foreground">{container.status}</TableCell>
         <TableCell className="text-muted-foreground max-w-[180px] truncate">
           {container.ports.length > 0 ? container.ports.join(", ") : "\u2014"}
+        </TableCell>
+        <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+          <TooltipProvider delayDuration={200}>
+            <div className="inline-flex items-center gap-1">
+              {isRunning ? (
+                <>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-7"
+                        disabled={isBusy}
+                        onClick={() => onAction("stop")}
+                      >
+                        {currentAction === "stop" ? (
+                          <Loader2 className="size-3.5 animate-spin" />
+                        ) : (
+                          <Square className="size-3.5" />
+                        )}
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Stop</TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-7"
+                        disabled={isBusy}
+                        onClick={() => onAction("restart")}
+                      >
+                        {currentAction === "restart" ? (
+                          <Loader2 className="size-3.5 animate-spin" />
+                        ) : (
+                          <RotateCw className="size-3.5" />
+                        )}
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Restart</TooltipContent>
+                  </Tooltip>
+                </>
+              ) : (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="size-7"
+                      disabled={isBusy}
+                      onClick={() => onAction("start")}
+                    >
+                      {currentAction === "start" ? (
+                        <Loader2 className="size-3.5 animate-spin" />
+                      ) : (
+                        <Play className="size-3.5" />
+                      )}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Start</TooltipContent>
+                </Tooltip>
+              )}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-7"
+                    disabled={isInspecting}
+                    onClick={onInspect}
+                  >
+                    {isInspecting ? (
+                      <Loader2 className="size-3.5 animate-spin" />
+                    ) : (
+                      <Info className="size-3.5" />
+                    )}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Inspect</TooltipContent>
+              </Tooltip>
+            </div>
+          </TooltipProvider>
         </TableCell>
       </TableRow>
 
@@ -402,4 +589,4 @@ function ContainerTableSkeleton() {
 }
 
 export { ContainerTable, ContainerTableSkeleton };
-export type { ContainerInfo, ContainerStats, ContainerTableProps };
+export type { ContainerInfo, ContainerStats, ContainerTableProps, DockerAction };

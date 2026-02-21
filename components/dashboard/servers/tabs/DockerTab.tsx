@@ -257,6 +257,7 @@ function DockerTab({ sessionId }: DockerTabProps) {
         containers={data.containers}
         statsMap={statsMap}
         filter={filter}
+        onActionComplete={handleRefresh}
       />
     </div>
   );
