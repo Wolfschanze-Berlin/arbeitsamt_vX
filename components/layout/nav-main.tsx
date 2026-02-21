@@ -55,7 +55,14 @@ const mainNavItems: NavItem[] = [
     subItems: [{ name: "Overview", path: "/" }],
   },
   { icon: Terminal, name: "SSH Terminal", path: "/ssh" },
-  { icon: Github, name: "GitHub", path: "/github" },
+  {
+    icon: Github,
+    name: "GitHub",
+    subItems: [
+      { name: "Overview", path: "/github" },
+      { name: "Repositories", path: "/github/repos" },
+    ],
+  },
   { icon: KanbanSquare, name: "Kanban", path: "/kanban" },
   { icon: Settings, name: "Settings", path: "/settings" },
   { icon: Calendar, name: "Calendar", path: "/calendar" },
@@ -112,7 +119,10 @@ const othersNavItems: NavItem[] = [
 function NavItemComponent({ item }: { item: NavItem }) {
   const pathname = usePathname();
   const isActive = item.path ? pathname === item.path : false;
-  const isSubActive = item.subItems?.some((sub) => pathname === sub.path) ?? false;
+  const isSubActive =
+    item.subItems?.some(
+      (sub) => pathname === sub.path || pathname.startsWith(sub.path + "/")
+    ) ?? false;
 
   if (item.subItems) {
     return (
