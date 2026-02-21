@@ -19,25 +19,25 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 const data = [
-  { month: "Jan", sales: 168 },
-  { month: "Feb", sales: 385 },
-  { month: "Mar", sales: 201 },
-  { month: "Apr", sales: 298 },
-  { month: "May", sales: 187 },
-  { month: "Jun", sales: 195 },
-  { month: "Jul", sales: 291 },
-  { month: "Aug", sales: 110 },
-  { month: "Sep", sales: 215 },
-  { month: "Oct", sales: 390 },
-  { month: "Nov", sales: 280 },
-  { month: "Dec", sales: 112 },
+  { month: "Jan", placements: 168 },
+  { month: "Feb", placements: 385 },
+  { month: "Mar", placements: 201 },
+  { month: "Apr", placements: 298 },
+  { month: "May", placements: 187 },
+  { month: "Jun", placements: 195 },
+  { month: "Jul", placements: 291 },
+  { month: "Aug", placements: 110 },
+  { month: "Sep", placements: 215 },
+  { month: "Oct", placements: 390 },
+  { month: "Nov", placements: 280 },
+  { month: "Dec", placements: 112 },
 ];
 
 export function MonthlySalesChart() {
   return (
     <div className="overflow-hidden rounded-2xl border bg-card px-5 pt-5 sm:px-6 sm:pt-6">
       <div className="flex items-center justify-between">
-        <h3 className="text-lg font-semibold">Monthly Sales</h3>
+        <h3 className="text-lg font-semibold">Monthly Placements</h3>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon" className="size-8">
@@ -57,7 +57,7 @@ export function MonthlySalesChart() {
             <XAxis dataKey="month" axisLine={false} tickLine={false} fontSize={12} />
             <YAxis axisLine={false} tickLine={false} fontSize={12} />
             <Tooltip />
-            <Bar dataKey="sales" fill="#465fff" radius={[4, 4, 0, 0]} />
+            <Bar dataKey="placements" fill="#465fff" radius={[4, 4, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </div>

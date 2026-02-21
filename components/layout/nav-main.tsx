@@ -49,7 +49,7 @@ const mainNavItems: NavItem[] = [
   {
     icon: LayoutDashboard,
     name: "Dashboard",
-    subItems: [{ name: "Ecommerce", path: "/" }],
+    subItems: [{ name: "Overview", path: "/" }],
   },
   { icon: Calendar, name: "Calendar", path: "/calendar" },
   { icon: UserCircle, name: "User Profile", path: "/profile" },

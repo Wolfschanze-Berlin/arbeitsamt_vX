@@ -17,25 +17,15 @@ export function AppSidebar() {
     <Sidebar collapsible="icon">
       <SidebarHeader className="p-4">
         <Link href="/" className="flex items-center gap-2">
-          {state === "expanded" ? (
-            <>
-              <img
-                src="/images/logo/logo.svg"
-                alt="Logo"
-                className="h-8 dark:hidden"
-              />
-              <img
-                src="/images/logo/logo-dark.svg"
-                alt="Logo"
-                className="hidden h-8 dark:block"
-              />
-            </>
-          ) : (
-            <img
-              src="/images/logo/logo-icon.svg"
-              alt="Logo"
-              className="size-8"
-            />
+          <img
+            src="/images/logo/logo-icon.svg"
+            alt="Logo"
+            className="size-8"
+          />
+          {state === "expanded" && (
+            <span className="text-lg font-bold tracking-tight">
+              Arbeitsamt
+            </span>
           )}
         </Link>
       </SidebarHeader>

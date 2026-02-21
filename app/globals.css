@@ -126,7 +126,7 @@
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
 
-  /* TailAdmin brand colors */
+  /* Arbeitsamt brand colors */
   --color-brand-50: #ecf3ff;
   --color-brand-100: #dde9ff;
   --color-brand-200: #c2d6ff;
@@ -138,7 +138,7 @@
   --color-brand-800: #252dae;
   --color-brand-900: #262e89;
 
-  /* TailAdmin semantic colors */
+  /* Arbeitsamt semantic colors */
   --color-success-50: #ecfdf3;
   --color-success-100: #d1fadf;
   --color-success-500: #12b76a;
@@ -157,7 +157,7 @@
   --color-orange-400: #fd853a;
   --color-orange-500: #fb6514;
 
-  /* TailAdmin text sizes */
+  /* Arbeitsamt text sizes */
   --text-title-sm: 30px;
   --text-title-sm--line-height: 38px;
   --text-theme-sm: 14px;
@@ -165,7 +165,7 @@
   --text-theme-xs: 12px;
   --text-theme-xs--line-height: 18px;
 
-  /* TailAdmin gray overrides */
+  /* Arbeitsamt gray overrides */
   --color-gray-dark: #1a2231;
 }
 
@@ -178,7 +178,7 @@
   }
 }
 
-/* TailAdmin utility classes */
+/* Arbeitsamt utility classes */
 .custom-scrollbar::-webkit-scrollbar {
   width: 5px;
   height: 5px;

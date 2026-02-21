@@ -18,10 +18,10 @@ type CountryData = {
 };
 
 const countries: CountryData[] = [
-  { name: "USA", flag: "/images/country/country-01.svg", customers: 2379, percentage: 79 },
-  { name: "France", flag: "/images/country/country-02.svg", customers: 589, percentage: 23 },
-  { name: "Germany", flag: "/images/country/country-03.svg", customers: 410, percentage: 15 },
-  { name: "India", flag: "/images/country/country-04.svg", customers: 312, percentage: 11 },
+  { name: "Berlin", flag: "/images/country/country-03.svg", customers: 2379, percentage: 79 },
+  { name: "Bayern", flag: "/images/country/country-03.svg", customers: 589, percentage: 23 },
+  { name: "NRW", flag: "/images/country/country-03.svg", customers: 410, percentage: 15 },
+  { name: "Hamburg", flag: "/images/country/country-03.svg", customers: 312, percentage: 11 },
 ];
 
 export function DemographicCard() {
@@ -29,9 +29,9 @@ export function DemographicCard() {
     <div className="rounded-2xl border bg-card p-5 sm:p-6">
       <div className="flex justify-between">
         <div>
-          <h3 className="text-lg font-semibold">Customers Demographic</h3>
+          <h3 className="text-lg font-semibold">Applicant Demographic</h3>
           <p className="mt-1 text-sm text-muted-foreground">
-            Number of customers based on country
+            Number of applicants based on region
           </p>
         </div>
         <DropdownMenu>
@@ -69,7 +69,7 @@ function CountryRow({ name, flag, customers, percentage }: CountryData) {
         <div>
           <p className="text-sm font-semibold">{name}</p>
           <span className="text-xs text-muted-foreground">
-            {customers.toLocaleString()} Customers
+            {customers.toLocaleString()} Applicants
           </span>
         </div>
       </div>

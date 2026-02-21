@@ -16,15 +16,15 @@ export function NavUser() {
       <DropdownMenuTrigger className="flex items-center gap-2 outline-none">
         <Avatar className="size-10">
           <AvatarImage src="/images/user/owner.jpg" alt="User" />
-          <AvatarFallback>M</AvatarFallback>
+          <AvatarFallback>A</AvatarFallback>
         </Avatar>
-        <span className="hidden text-sm font-medium lg:block">Musharof</span>
+        <span className="hidden text-sm font-medium lg:block">Admin</span>
         <ChevronDown className="hidden size-4 text-muted-foreground lg:block" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
         <div className="px-2 py-1.5">
-          <p className="text-sm font-medium">Musharof Chowdhury</p>
-          <p className="text-xs text-muted-foreground">randomuser@pimjo.com</p>
+          <p className="text-sm font-medium">Arbeitsamt Admin</p>
+          <p className="text-xs text-muted-foreground">admin@arbeitsamt.local</p>
         </div>
         <DropdownMenuSeparator />
         <DropdownMenuItem>

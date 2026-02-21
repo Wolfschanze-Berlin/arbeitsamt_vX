@@ -23,9 +23,9 @@ export function MonthlyTarget() {
       <div className="rounded-2xl bg-card px-5 pb-11 pt-5 shadow-sm sm:px-6 sm:pt-6">
         <div className="flex justify-between">
           <div>
-            <h3 className="text-lg font-semibold">Monthly Target</h3>
+            <h3 className="text-lg font-semibold">Placement Target</h3>
             <p className="mt-1 text-sm text-muted-foreground">
-              Target you've set for each month
+              Placement target for each month
             </p>
           </div>
           <DropdownMenu>
@@ -72,17 +72,17 @@ export function MonthlyTarget() {
         </div>
 
         <p className="mx-auto mt-10 max-w-[380px] text-center text-sm text-muted-foreground">
-          You earn $3287 today, it&apos;s higher than last month. Keep up your good work!
+          328 placements this month, higher than last month. Keep up the good work!
         </p>
       </div>
 
       {/* Bottom stats */}
       <div className="flex items-center justify-center gap-5 px-6 py-3.5 sm:gap-8 sm:py-5">
-        <StatItem label="Target" value="$20K" icon={<ArrowDown className="size-4 text-destructive" />} />
+        <StatItem label="Target" value="400" icon={<ArrowDown className="size-4 text-destructive" />} />
         <div className="h-7 w-px bg-border" />
-        <StatItem label="Revenue" value="$20K" icon={<ArrowUp className="size-4 text-success-500" />} />
+        <StatItem label="Placed" value="328" icon={<ArrowUp className="size-4 text-success-500" />} />
         <div className="h-7 w-px bg-border" />
-        <StatItem label="Today" value="$20K" icon={<ArrowUp className="size-4 text-success-500" />} />
+        <StatItem label="Today" value="12" icon={<ArrowUp className="size-4 text-success-500" />} />
       </div>
     </div>
   );

@@ -12,35 +12,35 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
-type Product = {
+type Application = {
   id: number;
-  name: string;
-  variants: string;
-  category: string;
-  price: string;
-  status: "Delivered" | "Pending" | "Canceled";
+  applicant: string;
+  role: string;
+  department: string;
+  date: string;
+  status: "Approved" | "Pending" | "Rejected";
   image: string;
 };
 
-const products: Product[] = [
-  { id: 1, name: 'MacBook Pro 13"', variants: "2 Variants", category: "Laptop", price: "$2,399.00", status: "Delivered", image: "/images/product/product-01.jpg" },
-  { id: 2, name: "Apple Watch Ultra", variants: "1 Variant", category: "Watch", price: "$879.00", status: "Pending", image: "/images/product/product-02.jpg" },
-  { id: 3, name: "iPhone 15 Pro Max", variants: "2 Variants", category: "SmartPhone", price: "$1,869.00", status: "Delivered", image: "/images/product/product-03.jpg" },
-  { id: 4, name: "iPad Pro 3rd Gen", variants: "2 Variants", category: "Electronics", price: "$1,699.00", status: "Canceled", image: "/images/product/product-04.jpg" },
-  { id: 5, name: "AirPods Pro 2nd Gen", variants: "1 Variant", category: "Accessories", price: "$240.00", status: "Delivered", image: "/images/product/product-05.jpg" },
+const applications: Application[] = [
+  { id: 1, applicant: "Anna Müller", role: "Software Engineer", department: "Engineering", date: "2026-02-18", status: "Approved", image: "/images/user/user-01.jpg" },
+  { id: 2, applicant: "Thomas Weber", role: "Product Manager", department: "Product", date: "2026-02-17", status: "Pending", image: "/images/user/user-02.jpg" },
+  { id: 3, applicant: "Sarah Klein", role: "Data Analyst", department: "Analytics", date: "2026-02-16", status: "Approved", image: "/images/user/user-03.jpg" },
+  { id: 4, applicant: "Max Fischer", role: "UX Designer", department: "Design", date: "2026-02-15", status: "Rejected", image: "/images/user/user-04.jpg" },
+  { id: 5, applicant: "Lena Schmidt", role: "DevOps Engineer", department: "Infrastructure", date: "2026-02-14", status: "Approved", image: "/images/user/user-05.jpg" },
 ];
 
 const statusVariant = {
-  Delivered: "default",
+  Approved: "default",
   Pending: "secondary",
-  Canceled: "destructive",
+  Rejected: "destructive",
 } as const;
 
 export function RecentOrdersTable() {
   return (
     <div className="overflow-hidden rounded-2xl border bg-card px-4 pb-3 pt-4 sm:px-6">
       <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <h3 className="text-lg font-semibold">Recent Orders</h3>
+        <h3 className="text-lg font-semibold">Recent Applications</h3>
         <div className="flex items-center gap-3">
           <Button variant="outline" size="sm" className="gap-2">
             <Filter className="size-4" />
@@ -55,41 +55,41 @@ export function RecentOrdersTable() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Products</TableHead>
-              <TableHead>Category</TableHead>
-              <TableHead>Price</TableHead>
+              <TableHead>Applicant</TableHead>
+              <TableHead>Department</TableHead>
+              <TableHead>Date</TableHead>
               <TableHead>Status</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {products.map((product) => (
-              <TableRow key={product.id}>
+            {applications.map((app) => (
+              <TableRow key={app.id}>
                 <TableCell>
                   <div className="flex items-center gap-3">
-                    <div className="size-[50px] overflow-hidden rounded-md">
+                    <div className="size-[50px] overflow-hidden rounded-full">
                       <img
-                        src={product.image}
-                        alt={product.name}
+                        src={app.image}
+                        alt={app.applicant}
                         className="size-[50px] object-cover"
                       />
                     </div>
                     <div>
-                      <p className="text-sm font-medium">{product.name}</p>
+                      <p className="text-sm font-medium">{app.applicant}</p>
                       <span className="text-xs text-muted-foreground">
-                        {product.variants}
+                        {app.role}
                       </span>
                     </div>
                   </div>
                 </TableCell>
                 <TableCell className="text-sm text-muted-foreground">
-                  {product.category}
+                  {app.department}
                 </TableCell>
                 <TableCell className="text-sm text-muted-foreground">
-                  {product.price}
+                  {app.date}
                 </TableCell>
                 <TableCell>
-                  <Badge variant={statusVariant[product.status]}>
-                    {product.status}
+                  <Badge variant={statusVariant[app.status]}>
+                    {app.status}
                   </Badge>
                 </TableCell>
               </TableRow>
