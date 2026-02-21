@@ -42,3 +42,7 @@ target/rust-analyzer/flycheck0/stdout
 # verrueckt-task
 .claude/*.local.md
 .claude/verrueckt-metadata.json
+
+.env
+.env*
+!.env.sample

@@ -14,3 +14,6 @@
 - ALWAYS use the LSP tool (goToDefinition, findReferences, hover, workspaceSymbol) when researching source code, finding symbols, tracing object definitions, or navigating call hierarchies. Prefer LSP over Grep/Glob for symbol-level queries.
 - When modifying file paths or moving files, always fix ALL cross-references and imports across the entire codebase. Never create copies of files as a workaround — fix the actual path references instead.
 - ALWAYS search Solomon's Library MCP for relevant context and overview before starting any task. Use `mcp__solomons-library__search` to find existing knowledge that may inform your approach.
+- NEVER write a file or class exceeding 500 lines — split into focused modules if needed
+- ALWAYS follow KISS (Keep It Simple) and DRY (Don't Repeat Yourself) principles
+- ALWAYS give each class/module a single, well-defined purpose (Single Responsibility)
