@@ -12,6 +12,7 @@ use crate::ssh::handler::{ClientHandler, ForwardingTable};
 
 /// Info about an active SSH connection (serializable for frontend)
 #[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ConnectionInfo {
     pub session_id: String,
     pub host: String,

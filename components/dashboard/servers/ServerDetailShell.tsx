@@ -51,7 +51,7 @@ type ConnectionState =
   | { status: "idle" }
   | { status: "connecting" }
   | { status: "connected"; sessionId: string }
-  | { status: "auth-failed"; host: string; port: number; username: string }
+  | { status: "auth-failed"; host: string; port: number; username: string; reason: string }
   | { status: "error"; message: string };
 
 // ---------------------------------------------------------------------------
@@ -114,9 +114,10 @@ function ServerDetailShell({ host }: ServerDetailShellProps) {
           host: config.hostname,
           port: config.port,
           username: config.user ?? "root",
-          authMethod: config.identityFile
-            ? { method: "keyfile", key_path: config.identityFile, passphrase: null }
-            : { method: "agent" },
+          authMethod: {
+            method: "auto",
+            identity_file: config.identityFile ?? null,
+          },
           cols: 80,
           rows: 24,
           output: outputChannel,
@@ -136,6 +137,7 @@ function ServerDetailShell({ host }: ServerDetailShellProps) {
             host: config.hostname,
             port: config.port,
             username: config.user ?? "root",
+            reason: message,
           });
         } else {
           setConnState({ status: "error", message });
@@ -180,6 +182,7 @@ function ServerDetailShell({ host }: ServerDetailShellProps) {
             host: values.host,
             port: values.port,
             username: values.username,
+            reason: message,
           });
         } else {
           setConnState({ status: "error", message });
@@ -294,6 +297,7 @@ function ServerDetailShell({ host }: ServerDetailShellProps) {
           host={connState.host}
           port={connState.port}
           username={connState.username}
+          reason={connState.reason}
           onSubmit={connectWithPassword}
         />
       );
@@ -342,11 +346,13 @@ function AuthFailedState({
   host,
   port,
   username,
+  reason,
   onSubmit,
 }: {
   host: string;
   port: number;
   username: string;
+  reason: string;
   onSubmit: (values: PasswordFormValues) => void;
 }) {
   const form = useForm<PasswordFormValues>({
@@ -358,11 +364,19 @@ function AuthFailedState({
     <div className="flex h-full min-h-[400px] items-center justify-center p-6">
       <Card className="w-full max-w-md">
         <CardHeader>
-          <CardTitle>Authentication Required</CardTitle>
+          <div className="flex items-center gap-2">
+            <AlertCircle className="text-destructive size-5" />
+            <CardTitle>Authentication Failed</CardTitle>
+          </div>
           <CardDescription>
-            Key-based authentication failed. Please provide a password to
-            connect.
+            Auto key-based authentication failed. You can try with a password
+            below.
           </CardDescription>
+          {reason && (
+            <pre className="bg-muted mt-2 max-h-24 overflow-auto rounded-md p-2 font-mono text-xs">
+              {reason}
+            </pre>
+          )}
         </CardHeader>
         <CardContent>
           <Form {...form}>

@@ -17,5 +17,5 @@ export default function ServerDetailPage() {
 
   if (!host) return null;
 
-  return <ServerDetailShell host={host} />;
+  return <ServerDetailShell key={host} host={host} />;
 }

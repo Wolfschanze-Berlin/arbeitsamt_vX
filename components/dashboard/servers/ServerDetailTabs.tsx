@@ -36,7 +36,7 @@ function ServerDetailTabs({ sessionId, host }: ServerDetailTabsProps) {
         <OverviewTab sessionId={sessionId} />
       </TabsContent>
 
-      <TabsContent value="monitor" className="flex-1 overflow-y-auto p-4">
+      <TabsContent value="monitor" className="flex-1 overflow-hidden">
         <MetricsTab sessionId={sessionId} isActive={activeTab === "monitor"} />
       </TabsContent>
 
