@@ -13,7 +13,7 @@ use tokio_util::sync::CancellationToken;
 use tauri::Manager;
 
 use crate::error::SshError;
-use crate::ssh::auth::{authenticate, authenticate_agent, is_agent_available, list_agent_key_info, AgentKeyInfo, AuthMethod};
+use crate::ssh::auth::{authenticate, authenticate_agent, authenticate_auto, is_agent_available, list_agent_key_info, AgentKeyInfo, AuthMethod};
 use crate::ssh::config::ResolvedSshConfig;
 use crate::ssh::handler::{ClientHandler, ForwardingTable};
 use crate::ssh::keepalive;
@@ -110,6 +110,9 @@ pub async fn ssh_connect(
         // 3. Authenticate with the provided method.
         match &auth_method {
             AuthMethod::Agent => authenticate_agent(&mut handle, &username).await?,
+            AuthMethod::Auto { identity_file } => {
+                authenticate_auto(&mut handle, &username, identity_file.as_deref()).await?
+            }
             other => authenticate(&mut handle, &username, other).await?,
         }
 

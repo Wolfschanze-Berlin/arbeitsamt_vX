@@ -20,6 +20,14 @@ pub enum AuthMethod {
     },
     #[serde(rename = "agent")]
     Agent,
+    /// Try all available methods automatically:
+    /// 1. Specific key file (if provided via identity_file)
+    /// 2. SSH agent
+    /// 3. Discovered keys in ~/.ssh/
+    #[serde(rename = "auto")]
+    Auto {
+        identity_file: Option<String>,
+    },
 }
 
 /// Information about a key held by the SSH agent, suitable for display in the UI.
@@ -147,6 +155,13 @@ pub async fn authenticate<H: Handler>(
                 "Agent auth must be dispatched via authenticate_agent()".to_string(),
             ))
         }
+        AuthMethod::Auto { .. } => {
+            // Auto authentication is handled by `authenticate_auto()`.
+            // Call it separately from `ssh_connect` in commands/ssh.rs.
+            Err(SshError::AuthFailed(
+                "Auto auth must be dispatched via authenticate_auto()".to_string(),
+            ))
+        }
     }
 }
 
@@ -199,6 +214,81 @@ pub async fn authenticate_agent<H: Handler>(
     Err(SshError::AuthFailed(
         "No agent key accepted by server".to_string(),
     ))
+}
+
+/// Authenticate automatically by trying multiple methods in order:
+/// 1. Specific identity file (if provided)
+/// 2. SSH agent
+/// 3. Discovered keys in ~/.ssh/ (id_ed25519, id_ecdsa, id_rsa, id_dsa)
+///
+/// Returns Ok(()) as soon as any method succeeds.
+pub async fn authenticate_auto<H: Handler>(
+    session: &mut Handle<H>,
+    username: &str,
+    identity_file: Option<&str>,
+) -> Result<(), SshError> {
+    let mut errors = Vec::new();
+
+    // 1. Try specific identity file first
+    if let Some(key_path) = identity_file {
+        log::info!("[auto-auth] Trying identity file: {}", key_path);
+        let method = AuthMethod::KeyFile {
+            key_path: key_path.to_string(),
+            passphrase: None,
+        };
+        match authenticate(session, username, &method).await {
+            Ok(()) => {
+                log::info!("[auto-auth] Success via identity file: {}", key_path);
+                return Ok(());
+            }
+            Err(e) => {
+                log::warn!("[auto-auth] Identity file failed: {}", e);
+                errors.push(format!("keyfile({}): {}", key_path, e));
+            }
+        }
+    }
+
+    // 2. Try SSH agent
+    log::info!("[auto-auth] Trying SSH agent");
+    match authenticate_agent(session, username).await {
+        Ok(()) => {
+            log::info!("[auto-auth] Success via SSH agent");
+            return Ok(());
+        }
+        Err(e) => {
+            log::warn!("[auto-auth] Agent failed: {}", e);
+            errors.push(format!("agent: {}", e));
+        }
+    }
+
+    // 3. Try discovered keys in ~/.ssh/
+    let discovered = discover_keys();
+    log::info!("[auto-auth] Discovered {} keys in ~/.ssh/", discovered.len());
+    for key_path in &discovered {
+        log::info!("[auto-auth] Trying key: {}", key_path.display());
+        let method = AuthMethod::KeyFile {
+            key_path: key_path.to_string_lossy().to_string(),
+            passphrase: None,
+        };
+        match authenticate(session, username, &method).await {
+            Ok(()) => {
+                log::info!("[auto-auth] Success via key: {}", key_path.display());
+                return Ok(());
+            }
+            Err(e) => {
+                log::warn!("[auto-auth] Key failed ({}): {}", key_path.display(), e);
+                errors.push(format!(
+                    "key({}): {}",
+                    key_path.file_name().unwrap_or_default().to_string_lossy(),
+                    e
+                ));
+            }
+        }
+    }
+
+    let msg = format!("All authentication methods failed: {}", errors.join("; "));
+    log::error!("[auto-auth] {}", msg);
+    Err(SshError::AuthFailed(msg))
 }
 
 /// Resolve ~ and relative paths for SSH key files
