@@ -3,7 +3,8 @@
   "identifier": "default",
   "description": "Capability for the main window",
   "windows": [
-    "main"
+    "main",
+    "ssh-popout-*"
   ],
   "permissions": [
     "core:default",
@@ -43,6 +44,9 @@
     "updater:default",
     "window-state:default",
     "core:window:allow-destroy",
-    "core:window:allow-close"
+    "core:window:allow-close",
+    "core:window:allow-set-title",
+    "core:webview:allow-create-webview-window",
+    "core:menu:default"
   ]
 }
