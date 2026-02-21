@@ -14,6 +14,7 @@ import {
   Plug,
   Terminal,
   Github,
+  Settings,
   ChevronRight,
   type LucideIcon,
 } from "lucide-react";
@@ -54,6 +55,7 @@ const mainNavItems: NavItem[] = [
   },
   { icon: Terminal, name: "SSH Terminal", path: "/ssh" },
   { icon: Github, name: "GitHub", path: "/github" },
+  { icon: Settings, name: "Settings", path: "/settings" },
   { icon: Calendar, name: "Calendar", path: "/calendar" },
   { icon: UserCircle, name: "User Profile", path: "/profile" },
   {

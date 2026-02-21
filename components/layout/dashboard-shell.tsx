@@ -7,6 +7,7 @@ import { AppSidebar } from "@/components/layout/app-sidebar";
 import { AppHeader } from "@/components/layout/app-header";
 import { SessionManager } from "@/components/dashboard/terminal";
 import { ConnectionDialog } from "@/components/dashboard/ssh/ConnectionDialog";
+import { SettingsProvider } from "@/context/settings-context";
 
 export default function DashboardShell({
   children,
@@ -27,6 +28,7 @@ export default function DashboardShell({
   }, [isSSH]);
 
   return (
+    <SettingsProvider>
     <SidebarProvider>
       <AppSidebar />
       <SidebarInset>
@@ -55,5 +57,6 @@ export default function DashboardShell({
         </main>
       </SidebarInset>
     </SidebarProvider>
+    </SettingsProvider>
   );
 }

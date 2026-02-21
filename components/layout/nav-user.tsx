@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { ChevronDown, UserCircle, Settings, HelpCircle, LogOut } from "lucide-react";
 import {
   DropdownMenu,
@@ -31,9 +32,11 @@ export function NavUser() {
           <UserCircle className="mr-2 size-4" />
           Edit profile
         </DropdownMenuItem>
-        <DropdownMenuItem>
-          <Settings className="mr-2 size-4" />
-          Account settings
+        <DropdownMenuItem asChild>
+          <Link href="/settings">
+            <Settings className="mr-2 size-4" />
+            Settings
+          </Link>
         </DropdownMenuItem>
         <DropdownMenuItem>
           <HelpCircle className="mr-2 size-4" />
