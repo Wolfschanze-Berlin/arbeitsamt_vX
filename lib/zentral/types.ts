@@ -53,6 +53,8 @@ export interface ZentralServer {
   sshAlias: string;
   label?: string;
   cloneDir?: string;
+  /** Path to the repo on this server (for remote-only projects). */
+  repoPath?: string;
 }
 
 export interface ZentralConfig {

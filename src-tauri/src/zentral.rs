@@ -1,8 +1,13 @@
 use serde::Serialize;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
-use std::time::Instant;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter};
+
+use crate::ssh::auth::authenticate_auto;
+use crate::ssh::config::resolve_host;
+use crate::ssh::handler::ClientHandler;
 
 #[derive(Clone, Serialize)]
 struct CloneProgress {
@@ -12,6 +17,14 @@ struct CloneProgress {
 #[derive(Clone, Serialize)]
 struct CloneComplete {
     path: String,
+}
+
+/// Scrub GITHUB_TOKEN from git output to prevent credential leaks.
+fn scrub_token(s: String) -> String {
+    match std::env::var("GITHUB_TOKEN") {
+        Ok(token) if !token.is_empty() => s.replace(&token, "***"),
+        _ => s,
+    }
 }
 
 /// Clone a git repository to a local path, streaming progress events.
@@ -32,9 +45,19 @@ pub fn zentral_clone_project(
         return Err(format!("Destination path already exists: {local_path}"));
     }
 
+    // Inject GITHUB_TOKEN into HTTPS clone URLs for private repo auth.
+    // Transforms https://github.com/o/r.git → https://x-access-token:TOKEN@github.com/o/r.git
+    let effective_url = match std::env::var("GITHUB_TOKEN") {
+        Ok(token) if !token.is_empty() && repo_url.starts_with("https://") => {
+            repo_url.replacen("https://", &format!("https://x-access-token:{token}@"), 1)
+        }
+        _ => repo_url.clone(),
+    };
+
     // Spawn git clone with --progress (writes progress to stderr)
     let mut child = std::process::Command::new("git")
-        .args(["clone", "--progress", &repo_url, &local_path])
+        .args(["clone", "--progress", &effective_url, &local_path])
+        .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .spawn()
@@ -54,8 +77,9 @@ pub fn zentral_clone_project(
         let mut lines = Vec::new();
         for line in reader.lines() {
             if let Ok(line) = line {
-                lines.push(line.clone());
-                let _ = app_clone.emit("zentral://clone-progress", CloneProgress { line });
+                let safe = scrub_token(line);
+                lines.push(safe.clone());
+                let _ = app_clone.emit("zentral://clone-progress", CloneProgress { line: safe });
             }
         }
         lines
@@ -67,7 +91,8 @@ pub fn zentral_clone_project(
     std::thread::spawn(move || {
         let reader = BufReader::new(stdout);
         for line in reader.lines().flatten() {
-            let _ = app_stdout.emit("zentral://clone-progress", CloneProgress { line });
+            let safe = scrub_token(line);
+            let _ = app_stdout.emit("zentral://clone-progress", CloneProgress { line: safe });
         }
     });
 
@@ -419,4 +444,261 @@ pub async fn zentral_scan_repos(
     });
 
     Ok(())
+}
+
+// ─── Scan Remote Repos via SSH ───────────────────────────────────────────────
+
+#[derive(Serialize, Clone)]
+pub struct RemoteRepoInfo {
+    pub path: String,
+    pub name: String,
+    pub remote_url: Option<String>,
+}
+
+#[derive(Serialize, Clone)]
+struct SshScanCompletePayload {
+    total: usize,
+    elapsed_ms: u64,
+}
+
+/// Wrapper to assert Send on russh futures (same pattern as commands/ssh.rs).
+struct AssertSend<F>(F);
+
+unsafe impl<F: std::future::Future> Send for AssertSend<F> {}
+
+impl<F: std::future::Future> std::future::Future for AssertSend<F> {
+    type Output = F::Output;
+
+    fn poll(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Self::Output> {
+        let inner = unsafe { self.map_unchecked_mut(|s| &mut s.0) };
+        inner.poll(cx)
+    }
+}
+
+/// Scan a remote SSH server for git repositories.
+///
+/// Opens an ephemeral SSH connection (no PTY, no session registration),
+/// runs `find` to locate `.git` directories, extracts repo metadata,
+/// and streams results via Tauri events:
+/// - `zentral://ssh-scan-result` — one `RemoteRepoInfo` per found repo
+/// - `zentral://ssh-scan-complete` — `{ total, elapsed_ms }` when done
+#[tauri::command]
+pub async fn zentral_scan_remote_repos(
+    app: AppHandle,
+    host: String,
+) -> Result<(), String> {
+    // Resolve SSH config before entering AssertSend block (sync operation).
+    let config = resolve_host(&host).map_err(|e| format!("Failed to resolve host: {e}"))?;
+
+    let hostname = config.hostname.clone();
+    let port = config.port;
+    let username = config.user.clone().unwrap_or_else(|| "root".into());
+    let identity_file = config.identity_file.clone();
+
+    // Wrap entire async body in AssertSend — russh futures are !Send but
+    // Tauri async commands require Send. All borrows live inside the block.
+    AssertSend(async move {
+        let start = Instant::now();
+
+        // 1. Ephemeral SSH connection
+        let ssh_config = Arc::new(russh::client::Config {
+            inactivity_timeout: Some(Duration::from_secs(60)),
+            keepalive_interval: Some(Duration::from_secs(15)),
+            ..Default::default()
+        });
+
+        let handler = ClientHandler::new();
+        let mut handle = russh::client::connect(
+            ssh_config,
+            (hostname.as_str(), port),
+            handler,
+        )
+        .await
+        .map_err(|e| format!("SSH connect failed: {e}"))?;
+
+        // 2. Authenticate
+        authenticate_auto(&mut handle, &username, identity_file.as_deref())
+            .await
+            .map_err(|e| format!("SSH auth failed: {e}"))?;
+
+        // 3. Run find command to discover repos
+        let scan_cmd = concat!(
+            "find -L ~ -maxdepth 4 -name .git -type d 2>/dev/null | while read d; do ",
+            "dir=$(dirname \"$d\"); ",
+            "name=$(basename \"$dir\"); ",
+            "url=$(git -C \"$dir\" config --get remote.origin.url 2>/dev/null); ",
+            "echo \"$dir|||$name|||$url\"; ",
+            "done"
+        );
+
+        let mut channel = handle.channel_open_session()
+            .await
+            .map_err(|e| format!("Failed to open channel: {e}"))?;
+
+        channel.exec(true, scan_cmd)
+            .await
+            .map_err(|e| format!("Failed to exec scan command: {e}"))?;
+
+        // 4. Collect output with timeout
+        let mut stdout_buf = Vec::new();
+        let timeout = tokio::time::sleep(Duration::from_secs(60));
+        tokio::pin!(timeout);
+
+        loop {
+            tokio::select! {
+                msg = channel.wait() => {
+                    match msg {
+                        Some(russh::ChannelMsg::Data { data }) => {
+                            stdout_buf.extend_from_slice(&data);
+                        }
+                        Some(russh::ChannelMsg::Eof | russh::ChannelMsg::Close) | None => break,
+                        _ => {}
+                    }
+                }
+                _ = &mut timeout => {
+                    let _ = channel.close().await;
+                    return Err("Scan timed out after 60 seconds".into());
+                }
+            }
+        }
+
+        // 5. Parse output and emit events
+        let output = String::from_utf8_lossy(&stdout_buf);
+        let mut total = 0usize;
+
+        for line in output.lines() {
+            let parts: Vec<&str> = line.splitn(3, "|||").collect();
+            if parts.len() >= 2 {
+                let repo = RemoteRepoInfo {
+                    path: parts[0].to_string(),
+                    name: parts[1].to_string(),
+                    remote_url: parts.get(2).and_then(|u| {
+                        let trimmed = u.trim();
+                        if trimmed.is_empty() { None } else { Some(trimmed.to_string()) }
+                    }),
+                };
+                let _ = app.emit("zentral://ssh-scan-result", &repo);
+                total += 1;
+            }
+        }
+
+        // 6. Emit completion + disconnect
+        let elapsed_ms = start.elapsed().as_millis() as u64;
+        let _ = app.emit(
+            "zentral://ssh-scan-complete",
+            SshScanCompletePayload { total, elapsed_ms },
+        );
+
+        handle.disconnect(
+            russh::Disconnect::ByApplication,
+            "scan complete",
+            "en",
+        )
+        .await
+        .ok();
+
+        Ok(())
+    })
+    .await
+}
+
+// ─── List Remote Directory via SSH ───────────────────────────────────────────
+
+#[derive(Serialize, Clone)]
+pub struct RemoteFsEntry {
+    pub name: String,
+    pub is_dir: bool,
+    pub path: String,
+}
+
+/// List the contents of a directory on a remote SSH server.
+///
+/// Runs `ls -1ap <path>` via an ephemeral SSH exec channel and returns
+/// a sorted list of entries (directories first, then files).
+#[tauri::command]
+pub async fn zentral_list_remote_dir(
+    host: String,
+    path: String,
+) -> Result<Vec<RemoteFsEntry>, String> {
+    let config = resolve_host(&host).map_err(|e| format!("Failed to resolve host: {e}"))?;
+
+    let hostname = config.hostname.clone();
+    let port = config.port;
+    let username = config.user.clone().unwrap_or_else(|| "root".into());
+    let identity_file = config.identity_file.clone();
+
+    AssertSend(async move {
+        let ssh_config = Arc::new(russh::client::Config {
+            inactivity_timeout: Some(Duration::from_secs(30)),
+            ..Default::default()
+        });
+
+        let handler = ClientHandler::new();
+        let mut handle = russh::client::connect(ssh_config, (hostname.as_str(), port), handler)
+            .await
+            .map_err(|e| format!("SSH connect failed: {e}"))?;
+
+        authenticate_auto(&mut handle, &username, identity_file.as_deref())
+            .await
+            .map_err(|e| format!("SSH auth failed: {e}"))?;
+
+        // ls -1ap: one entry per line, append / to dirs, include hidden
+        let cmd = format!("ls -1ap {}", shell_escape(&path));
+
+        let mut channel = handle.channel_open_session()
+            .await
+            .map_err(|e| format!("Failed to open channel: {e}"))?;
+        channel.exec(true, cmd.as_str())
+            .await
+            .map_err(|e| format!("Failed to exec ls: {e}"))?;
+
+        let mut buf = Vec::new();
+        loop {
+            match channel.wait().await {
+                Some(russh::ChannelMsg::Data { data }) => buf.extend_from_slice(&data),
+                Some(russh::ChannelMsg::Eof | russh::ChannelMsg::Close) | None => break,
+                _ => {}
+            }
+        }
+
+        handle.disconnect(russh::Disconnect::ByApplication, "", "en").await.ok();
+
+        let output = String::from_utf8_lossy(&buf);
+        let base = path.trim_end_matches('/');
+
+        let mut entries: Vec<RemoteFsEntry> = output
+            .lines()
+            .filter(|l| *l != "./" && *l != "../")
+            .filter(|l| !l.is_empty())
+            .map(|l| {
+                let is_dir = l.ends_with('/');
+                let name = l.trim_end_matches('/').to_string();
+                RemoteFsEntry {
+                    path: format!("{base}/{name}"),
+                    is_dir,
+                    name,
+                }
+            })
+            .collect();
+
+        // Directories first, then alphabetical
+        entries.sort_by(|a, b| {
+            if a.is_dir != b.is_dir {
+                return if a.is_dir { std::cmp::Ordering::Less } else { std::cmp::Ordering::Greater };
+            }
+            a.name.cmp(&b.name)
+        });
+
+        Ok(entries)
+    })
+    .await
+}
+
+/// Minimal shell escaping — wraps the path in single quotes and escapes
+/// any embedded single quotes with '\'' to prevent command injection.
+fn shell_escape(s: &str) -> String {
+    format!("'{}'", s.replace('\'', r"'\''"))
 }
