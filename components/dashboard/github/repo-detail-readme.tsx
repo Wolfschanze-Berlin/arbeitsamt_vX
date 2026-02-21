@@ -15,10 +15,11 @@ import rehypeSanitize from "rehype-sanitize";
 interface Props {
   owner: string;
   repo: string;
+  defaultOpen?: boolean;
 }
 
-export function RepoDetailReadme({ owner, repo }: Props) {
-  const [open, setOpen] = useState(false);
+export function RepoDetailReadme({ owner, repo, defaultOpen = false }: Props) {
+  const [open, setOpen] = useState(defaultOpen);
   const { data: readme, isLoading, error } = useRepoReadme(owner, repo);
 
   const hasReadme = !error && readme?.content;

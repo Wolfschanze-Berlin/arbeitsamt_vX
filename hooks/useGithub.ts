@@ -4,6 +4,7 @@ import useSWR, { type SWRConfiguration } from "swr";
 import {
   getAuthenticatedUser,
   getUserRepos,
+  getUserStarredRepos,
   getUserActivity,
   getUserOrgs,
   getOrgMembers,
@@ -12,6 +13,8 @@ import {
   getRepoIssues,
   getRepoPRs,
   getRepoContributors,
+  getRepoContents,
+  getRepoReleases,
   type GithubUser,
   type GithubRepo,
   type GithubEvent,
@@ -22,6 +25,8 @@ import {
   type GithubIssue,
   type GithubPR,
   type GithubContributor,
+  type GithubContent,
+  type GithubRelease,
 } from "@/lib/github";
 import { tauriInvoke } from "@/lib/tauri";
 import { loadCache, saveCache } from "@/lib/github-cache";
@@ -78,6 +83,17 @@ export function useUserRepos(page = 1, perPage = 30) {
   return useSWR<GithubRepo[]>(
     `github:repos:${page}:${perPage}`,
     withCache(`repos:${page}:${perPage}`, () => getUserRepos(page, perPage)),
+    OFFLINE_CONFIG,
+  );
+}
+
+/** Starred repositories for the authenticated user (paginated). */
+export function useUserStarredRepos(page = 1, perPage = 30) {
+  return useSWR<GithubRepo[]>(
+    `github:starred:${page}:${perPage}`,
+    withCache(`starred:${page}:${perPage}`, () =>
+      getUserStarredRepos(page, perPage),
+    ),
     OFFLINE_CONFIG,
   );
 }
@@ -178,6 +194,36 @@ export function useRepoContributors(owner: string | null, repo: string | null) {
     owner && repo
       ? withCache(`repo:contributors:${owner}/${repo}`, () =>
           getRepoContributors(owner, repo),
+        )
+      : null,
+    OFFLINE_CONFIG,
+  );
+}
+
+/** Latest releases for a specific repository (lazy — pass `null` to skip). */
+export function useRepoReleases(owner: string | null, repo: string | null) {
+  return useSWR<GithubRelease[]>(
+    owner && repo ? `repo:releases:${owner}/${repo}` : null,
+    owner && repo
+      ? withCache(`repo:releases:${owner}/${repo}`, () =>
+          getRepoReleases(owner, repo),
+        )
+      : null,
+    OFFLINE_CONFIG,
+  );
+}
+
+/** Directory contents for a specific path (lazy — pass `null` owner/repo to skip). */
+export function useRepoContents(
+  owner: string | null,
+  repo: string | null,
+  path = "",
+) {
+  return useSWR<GithubContent[]>(
+    owner && repo ? `repo:contents:${owner}/${repo}:${path}` : null,
+    owner && repo
+      ? withCache(`repo:contents:${owner}/${repo}:${path}`, () =>
+          getRepoContents(owner, repo, path),
         )
       : null,
     OFFLINE_CONFIG,

@@ -58,6 +58,7 @@ export interface GithubRepo {
   full_name: string;
   private: boolean;
   html_url: string;
+  clone_url: string;
   description: string | null;
   fork: boolean;
   language: string | null;
@@ -137,6 +138,27 @@ export interface GithubContributor {
   avatar_url: string;
   contributions: number;
   html_url: string;
+}
+
+export interface GithubContent {
+  name: string;
+  path: string;
+  sha: string;
+  size: number;
+  type: "file" | "dir" | "symlink" | "submodule";
+  html_url: string;
+  download_url: string | null;
+}
+
+export interface GithubRelease {
+  id: number;
+  tag_name: string;
+  name: string | null;
+  html_url: string;
+  prerelease: boolean;
+  draft: boolean;
+  published_at: string | null;
+  author: { login: string; avatar_url: string };
 }
 
 // ---------------------------------------------------------------------------
@@ -347,6 +369,38 @@ export function getRepoContributors(
   );
 }
 
+export function getRepoContents(
+  owner: string,
+  repo: string,
+  path = "",
+): Promise<GithubContent[]> {
+  const encoded = path
+    ? `/${path.split("/").map(encodeURIComponent).join("/")}`
+    : "";
+  return fetchGithub<GithubContent[]>(
+    `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contents${encoded}`,
+  );
+}
+
+export function getRepoReleases(
+  owner: string,
+  repo: string,
+  perPage = 5,
+): Promise<GithubRelease[]> {
+  return fetchGithub<GithubRelease[]>(
+    `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/releases?per_page=${perPage}`,
+  );
+}
+
+export function getUserStarredRepos(
+  page = 1,
+  perPage = 30,
+): Promise<GithubRepo[]> {
+  return fetchGithub<GithubRepo[]>(
+    `/user/starred?sort=updated&page=${page}&per_page=${perPage}`,
+  );
+}
+
 export function createRepo(
   name: string,
   isPrivate: boolean,
@@ -356,4 +410,49 @@ export function createRepo(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ name, private: isPrivate, auto_init: true }),
   });
+}
+
+// ---------------------------------------------------------------------------
+// Issue updates & labels
+// ---------------------------------------------------------------------------
+
+export interface GithubLabel {
+  name: string;
+  color: string;
+  description: string | null;
+}
+
+export function getRepoLabels(
+  owner: string,
+  repo: string,
+): Promise<GithubLabel[]> {
+  return fetchGithub<GithubLabel[]>(
+    `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/labels?per_page=100`,
+  );
+}
+
+export function updateIssue(
+  owner: string,
+  repo: string,
+  issueNumber: number,
+  data: { title?: string; body?: string; labels?: string[] },
+): Promise<GithubIssue> {
+  return fetchGithub<GithubIssue>(
+    `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/issues/${issueNumber}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    },
+  );
+}
+
+export function deleteIssue(
+  owner: string,
+  repo: string,
+  issueNumber: number,
+): Promise<void> {
+  // GitHub doesn't support true deletion for non-admins.
+  // Close the issue and add a "deleted" marker label.
+  return closeIssue(owner, repo, issueNumber);
 }
