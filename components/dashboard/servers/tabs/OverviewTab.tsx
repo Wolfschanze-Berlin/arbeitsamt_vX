@@ -30,18 +30,22 @@ interface DiskEntry {
   mountedOn: string;
 }
 
+// Cross-platform command: works on both Linux (/proc) and macOS (sysctl).
 const COMMAND = [
   "uname -a",
   "echo '---DELIM---'",
-  "cat /proc/cpuinfo | grep 'model name' | head -1",
+  // CPU: Linux uses /proc/cpuinfo, macOS uses sysctl
+  "if [ -f /proc/cpuinfo ]; then grep 'model name' /proc/cpuinfo | head -1; else sysctl -n machdep.cpu.brand_string 2>/dev/null || echo 'Unknown'; fi",
   "echo '---DELIM---'",
-  "free -m",
+  // RAM: Linux uses free -m, macOS uses sysctl + vm_stat
+  "if command -v free >/dev/null 2>&1; then free -m; else echo \"Mem: $(( $(sysctl -n hw.memsize 2>/dev/null || echo 0) / 1048576 )) $(vm_stat 2>/dev/null | awk '/Pages active/ {printf \"%d\", $3*4096/1048576}') 0\"; fi",
   "echo '---DELIM---'",
   "df -h",
   "echo '---DELIM---'",
   "uptime",
   "echo '---DELIM---'",
-  "hostname -I",
+  // IPs: Linux uses hostname -I, macOS uses ipconfig/ifconfig
+  "hostname -I 2>/dev/null || (ifconfig 2>/dev/null | grep 'inet ' | grep -v 127.0.0.1 | awk '{print $2}' | tr '\\n' ' ')",
 ].join(" && ");
 
 function parseRam(section: string): SystemInfo["ram"] {
@@ -50,10 +54,17 @@ function parseRam(section: string): SystemInfo["ram"] {
   if (!memLine) return { total: 0, used: 0, free: 0 };
 
   const parts = memLine.split(/\s+/);
+  // Linux free -m: columns are total used free shared buff/cache available (all in MB)
+  // macOS fallback: "Mem: <total_mb> <active_mb> 0" (already in MB)
+  const hasMultipleColumns = parts.length >= 6;
+  const totalMb = parseInt(parts[1], 10);
+  const usedMb = parseInt(parts[2], 10);
+  const freeMb = hasMultipleColumns ? parseInt(parts[3], 10) : totalMb - usedMb;
+
   return {
-    total: Math.round((parseInt(parts[1], 10) / 1024) * 10) / 10,
-    used: Math.round((parseInt(parts[2], 10) / 1024) * 10) / 10,
-    free: Math.round((parseInt(parts[3], 10) / 1024) * 10) / 10,
+    total: Math.round((totalMb / 1024) * 10) / 10,
+    used: Math.round((usedMb / 1024) * 10) / 10,
+    free: Math.round((freeMb / 1024) * 10) / 10,
   };
 }
 
@@ -113,8 +124,9 @@ function parseUptime(section: string): string {
 
 function parseCpu(section: string): string {
   const line = section.trim();
+  // Linux: "model name : Intel Core i7-...", macOS: just "Apple M1 Pro"
   const match = line.match(/model name\s*:\s*(.+)/i);
-  return match ? match[1].trim() : "Unknown";
+  return match ? match[1].trim() : line || "Unknown";
 }
 
 function parseSystemInfo(raw: string): SystemInfo {
