@@ -55,6 +55,11 @@ export const PREDEFINED_TOKENS: Omit<ApiToken, "id" | "value">[] = [
     description: "OpenAI API key for AI-powered features",
     isCustom: false,
   },
+  {
+    key: "ANTHROPIC_API_KEY",
+    description: "Anthropic API key for Claude models",
+    isCustom: false,
+  },
 ];
 
 export interface AppSettings {
