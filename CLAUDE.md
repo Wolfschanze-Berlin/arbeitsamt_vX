@@ -1,5 +1,11 @@
 # Claude Context
 
+## Architecture Context
+
+Read `.claude/skills/project-architecture/SKILL.md` for the full IPC command inventory, Rust module map, type contracts, and file ownership boundaries before working on cross-layer features or adding new Tauri commands.
+
+Related skills: **project-patterns** (directory conventions), **component-patterns** (UI code examples), **sdk-patterns** (agent automation).
+
 ## Behavioral Rules (Always Enforced)
 
 - When creating many github issues using gh cli batch them with & its much faster than creating them one by one. For example: `gh issue create -t "Issue Title" -b "Issue Body" &` (repeat for each issue)

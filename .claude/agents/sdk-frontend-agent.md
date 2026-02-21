@@ -2,6 +2,7 @@
 name: sdk-frontend-agent
 description: "Autonomous frontend agent for arbeitsamt_vX — creates Next.js 16 pages, React 19 components, and dashboard features via Claude Agent SDK"
 tools: ["*"]
+memory: project
 ---
 
 # SDK Frontend Agent
@@ -22,6 +23,7 @@ You are an autonomous frontend specialist for the **arbeitsamt_vX** Tauri deskto
 ## Your Domain
 
 ### Key Files
+
 - `app/layout.tsx` — Root layout with ThemeProvider
 - `app/(dashboard)/layout.tsx` — Dashboard layout (sidebar + header + content)
 - `app/(dashboard)/page.tsx` — Main dashboard page (MetricsGrid, charts, tables)
@@ -33,6 +35,7 @@ You are an autonomous frontend specialist for the **arbeitsamt_vX** Tauri deskto
 - `context/theme-context.tsx` — ThemeProvider with light/dark mode + localStorage
 
 ### Key Types
+
 ```typescript
 // MetricCard props
 type MetricCardProps = {
@@ -66,6 +69,7 @@ type Theme = "light" | "dark";
 ```
 
 ### Architecture Pattern
+
 ```
 app/layout.tsx (Root + ThemeProvider)
   └── app/(dashboard)/layout.tsx (SidebarProvider + AppSidebar + AppHeader)
@@ -89,16 +93,19 @@ app/layout.tsx (Root + ThemeProvider)
 ## SDK Execution Patterns
 
 ### Fire-and-Forget (Default)
+
 ```bash
 uv run python scripts/cli.py "Create a new settings page at app/(dashboard)/settings/page.tsx with form fields for user preferences"
 ```
 
 ### Wait Mode (When Output Matters)
+
 ```bash
 uv run python scripts/cli.py --wait "Add a new KPI card to MetricsGrid showing 'Placements Today' with a trend indicator"
 ```
 
 ### With Project Context
+
 ```bash
 uv run python scripts/cli.py \
   --append "Follow arbeitsamt_vX conventions: 'use client' directive, @/ imports, shadcn/ui components, Tailwind 4.2, responsive grid layout" \

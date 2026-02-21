@@ -1,41 +1,46 @@
 ---
-name: sdk-patterns
-description: "This skill provides Claude Agent SDK patterns specific to arbeitsamt_vX. Use when running SDK agents, configuring agent options, or building custom agent workflows."
+name: SDK Patterns
+description: >
+  Claude Agent SDK patterns specific to arbeitsamt_vX. Use this skill when running
+  SDK agents, configuring agent options, building custom agent workflows, or automating
+  development tasks. Also use when the user says "spawn an agent", "run this in the
+  background", "automate this", "use an SDK agent", "fire and forget", or asks about
+  agent configuration, tool restrictions, or validation after agent work.
+version: 1.1.0
 ---
 
 # SDK Patterns for arbeitsamt_vX
 
-## Quick Start
+## Available Agents
 
-### Run an SDK Agent
-
-```bash
-# Fire-and-forget (default) — agent works autonomously
-uv run python scripts/cli.py "Your task here"
-
-# Wait for response — blocks until agent completes
-uv run python scripts/cli.py --wait "Your task here"
-
-# With project-specific system prompt
-uv run python scripts/cli.py \
-  --append "Follow arbeitsamt_vX conventions: 'use client', @/ imports, shadcn/ui, Tailwind 4.2, static export" \
-  "Your task here"
-```
-
-## Available SDK Agents
+### SDK Agents (autonomous, fire-and-forget or wait)
 
 | Agent | File | Use For |
 |-------|------|---------|
 | `sdk-frontend-agent` | `.claude/agents/sdk-frontend-agent.md` | Next.js pages, React components, dashboard features |
 | `sdk-tauri-agent` | `.claude/agents/sdk-tauri-agent.md` | Tauri commands, Rust backend, IPC bridge, plugins |
 
-### Existing Project Agents (Non-SDK)
+### Interactive Agents (subagent_type in Task tool)
 
-| Agent | File | Use For |
-|-------|------|---------|
-| `frontend-dev` | `.claude/agents/frontend-dev.md` | Interactive frontend development |
-| `tauri-dev` | `.claude/agents/tauri-dev.md` | Interactive Tauri/Rust development |
-| `test-writer` | `.claude/agents/test-writer.md` | Test setup and writing |
+| Agent | subagent_type | Use For |
+|-------|---------------|---------|
+| Frontend dev | `frontend-dev` | Interactive frontend development with user feedback |
+| Tauri dev | `tauri-dev` | Interactive Tauri/Rust development |
+| Test writer | `test-writer` | Test setup and writing |
+
+## When to Use SDK Agents
+
+Use SDK agents for well-defined, autonomous tasks. Use interactive agents when you need back-and-forth with the user or the task scope is unclear.
+
+| Task Type | Agent | Mode |
+|-----------|-------|------|
+| New page or route | sdk-frontend-agent | fire-and-forget |
+| New dashboard component | sdk-frontend-agent | fire-and-forget |
+| Chart or data visualization | sdk-frontend-agent | wait |
+| Form with validation | sdk-frontend-agent | wait |
+| New Tauri command | sdk-tauri-agent | fire-and-forget |
+| Tauri plugin integration | sdk-tauri-agent | wait |
+| Full-stack feature (frontend + Rust) | Both agents sequentially | wait |
 
 ## Project-Specific Configuration
 
@@ -50,7 +55,7 @@ frontend_options = build_options(
     model="claude-sonnet-4-6",
     system_prompt_append="""
     Project: arbeitsamt_vX (Tauri 2 + Next.js 16 desktop app)
-    Framework: Next.js 16.1.6 with output: 'export' (static only)
+    Framework: Next.js 16 with output: 'export' (static only, no SSR)
     UI: React 19 + shadcn/ui + Tailwind CSS 4.2
     Conventions:
     - Every file needs "use client" directive
@@ -58,6 +63,7 @@ frontend_options = build_options(
     - Use cn() from lib/utils for conditional classes
     - Never edit components/ui/ directly
     - Responsive design with sm/md/lg/xl breakpoints
+    - Use tauriInvoke/tauriListen from lib/tauri.ts for IPC
     """,
 )
 
@@ -74,6 +80,7 @@ tauri_options = build_options(
     - Use Result<T, String> for error handling
     - Frontend uses lib/tauri.ts wrapper (never import @tauri-apps/api directly)
     - Serialize complex types with serde
+    - Add permissions in src-tauri/capabilities/default.json
     """,
 )
 ```
@@ -86,33 +93,37 @@ tauri_options = build_options(
 | Tauri (Rust commands) | Edit, Write, Read, Bash | Needs cargo check/build/test |
 | UI components | Bash only | Use `bunx shadcn add` — never edit ui/ directly |
 
+### File Ownership
+
+| Agent | Owns | Does Not Touch |
+|-------|------|----------------|
+| sdk-frontend-agent | app/, components/dashboard/, components/layout/, lib/, context/, hooks/ | components/ui/, src-tauri/ |
+| sdk-tauri-agent | src-tauri/src/, src-tauri/Cargo.toml, lib/tauri.ts | app/, components/ |
+
 ## Key Project Types
 
 ### Frontend Types
 ```typescript
-// Theme system
-type Theme = "light" | "dark";
+type Theme = "light" | "dark"
 
-// Metric cards
 type MetricCardProps = {
-  icon: LucideIcon;
-  label: string;
-  value: string;
-  trend: { value: string; direction: "up" | "down" };
-};
+  icon: LucideIcon
+  label: string
+  value: string
+  trend: { value: string; direction: "up" | "down" }
+}
 
-// Navigation
 type NavItem = {
-  name: string;
-  icon: LucideIcon;
-  path?: string;
-  subItems?: { name: string; path: string }[];
-};
+  name: string
+  icon: LucideIcon
+  path?: string
+  subItems?: { name: string; path: string }[]
+}
 ```
 
 ### Tauri IPC Bridge
 ```typescript
-// lib/tauri.ts — safe wrappers
+// lib/tauri.ts — safe wrappers with lazy-loading and env detection
 tauriInvoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T>
 tauriListen<T>(event: string, handler: (payload: T) => void): Promise<() => void>
 tauriEmit(event: string, payload?: unknown): Promise<void>
@@ -122,34 +133,27 @@ tauriEmit(event: string, payload?: unknown): Promise<void>
 
 ### Frontend Tasks
 ```bash
-# New dashboard page
-uv run python scripts/cli.py "Create a new page at app/(dashboard)/analytics/page.tsx with a chart showing placement trends over 12 months using Recharts AreaChart"
+# New dashboard page — use sdk-frontend-agent
+Task(subagent_type="sdk-frontend-agent", prompt="Create a new page at app/(dashboard)/analytics/page.tsx with a chart showing placement trends over 12 months using Recharts AreaChart")
 
-# New component
-uv run python scripts/cli.py "Create a NotificationBell component in components/layout/ that shows a badge count and dropdown list"
-
-# Add shadcn component
-uv run python scripts/cli.py "Add the shadcn/ui dialog component and create a ConfirmDialog wrapper in components/dashboard/"
+# New component — use sdk-frontend-agent
+Task(subagent_type="sdk-frontend-agent", prompt="Create a NotificationBell component in components/layout/ that shows a badge count and dropdown list")
 ```
 
 ### Tauri Tasks
 ```bash
-# New command
-uv run python scripts/cli.py "Add a Tauri command 'get_app_version' that returns the version from Cargo.toml"
-
-# Add plugin
-uv run python scripts/cli.py "Add the tauri-plugin-store for persistent key-value storage, configure permissions, and create wrapper functions in lib/tauri.ts"
+# New command — use sdk-tauri-agent
+Task(subagent_type="sdk-tauri-agent", prompt="Add a Tauri command 'get_app_version' that returns the version from Cargo.toml")
 ```
 
 ## Error Handling
 
 | Error | In This Project | Fix |
 |-------|-----------------|-----|
-| CLINotFoundError | Claude Code CLI not installed | `npm i -g @anthropic-ai/claude-code` |
-| ProcessError | API key or process issue | Check ANTHROPIC_API_KEY env var |
 | Build failure | Next.js static export error | Run `bun run build` to see error details |
 | Cargo error | Rust compilation failure | Run `cd src-tauri && cargo check` |
 | Missing component | shadcn/ui not installed | Run `bunx shadcn add <component-name>` |
+| Tauri env error | Not running in Tauri webview | Ensure component uses lib/tauri.ts wrappers |
 
 ## Validation Checklist
 
@@ -157,6 +161,10 @@ After SDK agent completes work:
 - [ ] `bun run build` passes (Next.js static export)
 - [ ] `cd src-tauri && cargo check` passes (if Rust changed)
 - [ ] No TypeScript errors
-- [ ] New pages accessible via sidebar navigation
+- [ ] New pages accessible via sidebar navigation (`components/layout/nav-main.tsx`)
 - [ ] Light/dark theme works on new components
 - [ ] Responsive layout works at common breakpoints
+- [ ] All props are typed — no `any`
+- [ ] `"use client"` directive present on all new component files
+
+See also: **component-patterns** for UI code examples, **project-patterns** for architecture conventions.

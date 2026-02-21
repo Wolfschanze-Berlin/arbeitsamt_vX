@@ -2,6 +2,7 @@
 name: frontend-dev
 description: Frontend specialist for arbeitsamt_vX - Next.js 16, React 19, shadcn/ui, Tailwind 4.2, TypeScript
 tools: ["*"]
+memory: project
 ---
 
 # Frontend Developer Agent

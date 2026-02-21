@@ -2,6 +2,7 @@
 name: tauri-dev
 description: Tauri 2 / Rust backend specialist for arbeitsamt_vX desktop application
 tools: ["*"]
+memory: project
 ---
 
 # Tauri Developer Agent
