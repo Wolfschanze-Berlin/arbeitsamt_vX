@@ -115,6 +115,7 @@ export interface GithubIssue {
   number: number;
   title: string;
   state: string;
+  body: string | null;
   user: { login: string; avatar_url: string };
   labels: { name: string; color: string }[];
   created_at: string;
@@ -270,9 +271,61 @@ export function getRepoCommits(
 export function getRepoIssues(
   owner: string,
   repo: string,
+  labels?: string[],
 ): Promise<GithubIssue[]> {
+  const params = new URLSearchParams({ state: "open", per_page: "10" });
+  if (labels && labels.length > 0) {
+    params.set("labels", labels.join(","));
+  }
   return fetchGithub<GithubIssue[]>(
-    `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/issues?state=open&per_page=10`,
+    `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/issues?${params.toString()}`,
+  );
+}
+
+export function createIssue(
+  owner: string,
+  repo: string,
+  data: { title: string; body: string; labels: string[] },
+): Promise<GithubIssue> {
+  return fetchGithub<GithubIssue>(
+    `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/issues`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    },
+  );
+}
+
+export async function closeIssue(
+  owner: string,
+  repo: string,
+  issueNumber: number,
+): Promise<void> {
+  await fetchGithub<GithubIssue>(
+    `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/issues/${issueNumber}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ state: "closed" }),
+    },
+  );
+}
+
+export async function createLabel(
+  owner: string,
+  repo: string,
+  name: string,
+  color: string,
+  description: string,
+): Promise<void> {
+  await fetchGithub<unknown>(
+    `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/labels`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, color, description }),
+    },
   );
 }
 
@@ -292,4 +345,15 @@ export function getRepoContributors(
   return fetchGithub<GithubContributor[]>(
     `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contributors?per_page=10`,
   );
+}
+
+export function createRepo(
+  name: string,
+  isPrivate: boolean,
+): Promise<GithubRepo> {
+  return fetchGithub<GithubRepo>("/user/repos", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, private: isPrivate, auto_init: true }),
+  });
 }
