@@ -12,6 +12,7 @@ mod tunnel;
 mod pty;
 mod commands;
 mod state;
+mod zentral;
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 #[tauri::command]
@@ -290,6 +291,9 @@ pub fn run() {
             commands::dashboard::ssh_get_metrics,
             commands::docker::ssh_docker_data,
             commands::docker::ssh_docker_logs,
+            zentral::zentral_clone_project,
+            zentral::zentral_import_local_path,
+            zentral::zentral_scan_repos,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
