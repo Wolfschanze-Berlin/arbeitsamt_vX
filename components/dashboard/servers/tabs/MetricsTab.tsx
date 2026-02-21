@@ -337,7 +337,8 @@ function MetricsTab({ sessionId, isActive }: MetricsTabProps) {
       setNetTxHistory((h) => pushHistory(h, result.net_tx_bps));
     } catch (err) {
       if (!mountedRef.current) return;
-      setError(err instanceof Error ? err.message : String(err));
+      const e = err as Record<string, unknown>;
+      setError(typeof e?.message === "string" ? e.message : JSON.stringify(err));
     }
   }, [sessionId]);
 

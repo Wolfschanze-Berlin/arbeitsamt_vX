@@ -145,7 +145,8 @@ function OverviewTab({ sessionId }: OverviewTabProps) {
       });
       setInfo(parseSystemInfo(result));
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      const e = err as Record<string, unknown>;
+      setError(typeof e?.message === "string" ? e.message : JSON.stringify(err));
     } finally {
       setLoading(false);
     }
