@@ -1,5 +1,13 @@
 use tauri::Manager;
 
+mod error;
+mod ssh;
+mod sftp;
+mod tunnel;
+mod pty;
+mod commands;
+mod state;
+
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 #[tauri::command]
 fn greet(name: &str) -> String {
@@ -62,7 +70,13 @@ pub fn run() {
         })
         // === Cross-platform plugins ===
         .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_log::Builder::new().build())
+        .plugin(
+            tauri_plugin_log::Builder::new()
+                .level(log::LevelFilter::Info)
+                .level_for("russh", log::LevelFilter::Warn)
+                .level_for("russh_keys", log::LevelFilter::Warn)
+                .build(),
+        )
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_os::init())
@@ -78,7 +92,42 @@ pub fn run() {
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_localhost::Builder::new(9527).build())
         .plugin(tauri_plugin_sql::Builder::new().build())
-        .invoke_handler(tauri::generate_handler![greet])
+        .manage(state::AppState::new())
+        .invoke_handler(tauri::generate_handler![
+            greet,
+            commands::ssh::ssh_connect,
+            commands::ssh::ssh_write,
+            commands::ssh::ssh_resize,
+            commands::ssh::ssh_disconnect,
+            commands::ssh::ssh_list_sessions,
+            commands::ssh::ssh_save_profile,
+            commands::ssh::ssh_list_profiles,
+            commands::ssh::ssh_delete_profile,
+            commands::ssh::ssh_update_profile,
+            commands::ssh::ssh_resolve_config,
+            commands::ssh::ssh_list_config_hosts,
+            commands::ssh::ssh_discover_keys,
+            commands::ssh::ssh_check_agent,
+            commands::ssh::ssh_list_agent_keys,
+            commands::sftp::sftp_list_dir,
+            commands::sftp::sftp_mkdir,
+            commands::sftp::sftp_delete,
+            commands::sftp::sftp_rename,
+            commands::sftp::sftp_stat,
+            commands::sftp::sftp_upload,
+            commands::sftp::sftp_download,
+            commands::sftp::sftp_cancel_transfer,
+            commands::tunnel::tunnel_local_forward,
+            commands::tunnel::tunnel_stop,
+            commands::tunnel::tunnel_list,
+            commands::tunnel::tunnel_remote_forward,
+            commands::tunnel::tunnel_stop_remote,
+            commands::tunnel::tunnel_list_remote,
+            commands::pty::pty_spawn,
+            commands::pty::pty_write,
+            commands::pty::pty_resize,
+            commands::pty::pty_close,
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
