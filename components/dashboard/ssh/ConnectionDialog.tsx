@@ -35,6 +35,11 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
+import { Separator } from "@/components/ui/separator";
+import { useSettings } from "@/context/settings-context";
+import { PROFILE_COLOR_TAGS } from "@/lib/settings";
+import { Settings2 } from "lucide-react";
+import Link from "next/link";
 
 interface ResolvedSshConfig {
   hostname: string;
@@ -95,6 +100,8 @@ interface ConnectionDialogProps {
   onConnect: (params: ConnectionParams) => void;
   isConnecting?: boolean;
   error?: string;
+  /** Pre-select a saved profile by ID */
+  profileId?: string;
 }
 
 function ConnectionDialog({
@@ -103,7 +110,9 @@ function ConnectionDialog({
   onConnect,
   isConnecting = false,
   error,
+  profileId,
 }: ConnectionDialogProps) {
+  const { settings } = useSettings();
   const [configHosts, setConfigHosts] = useState<string[]>([]);
   const [loadingHosts, setLoadingHosts] = useState(false);
 
@@ -121,6 +130,36 @@ function ConnectionDialog({
   });
 
   const authMethod = form.watch("authMethod");
+  const savedProfiles = settings.sshProfiles;
+
+  // Pre-fill form from a saved profile
+  useEffect(() => {
+    if (!open || !profileId) return;
+    const profile = savedProfiles.find((p) => p.id === profileId);
+    if (!profile) return;
+    form.setValue("host", profile.host, { shouldValidate: true });
+    form.setValue("port", profile.port, { shouldValidate: true });
+    form.setValue("username", profile.username, { shouldValidate: true });
+    form.setValue("authMethod", profile.authMethod.method, { shouldValidate: true });
+    if (profile.authMethod.method === "keyfile") {
+      form.setValue("keyPath", profile.authMethod.keyPath, { shouldValidate: true });
+    }
+  }, [open, profileId, savedProfiles, form]);
+
+  function handleProfileQuickConnect(id: string) {
+    const profile = savedProfiles.find((p) => p.id === id);
+    if (!profile) return;
+    const params: ConnectionParams = {
+      host: profile.host,
+      port: profile.port,
+      username: profile.username,
+      authMethod: profile.authMethod.method,
+    };
+    if (profile.authMethod.method === "keyfile") {
+      params.keyPath = profile.authMethod.keyPath;
+    }
+    onConnect(params);
+  }
 
   // Load SSH config hosts and discover default key when dialog opens
   useEffect(() => {
@@ -237,6 +276,40 @@ function ConnectionDialog({
             Enter the connection details for the remote host.
           </DialogDescription>
         </DialogHeader>
+
+        {/* Saved Profiles Quick Connect */}
+        {savedProfiles.length > 0 && (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label className="text-sm text-muted-foreground">Saved Profiles</Label>
+              <Button variant="ghost" size="sm" asChild className="h-auto p-0 text-xs text-muted-foreground">
+                <Link href="/settings">
+                  <Settings2 className="mr-1 size-3" />
+                  Manage
+                </Link>
+              </Button>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {savedProfiles.map((profile) => {
+                const colorTag = PROFILE_COLOR_TAGS.find((t) => t.value === profile.colorTag);
+                return (
+                  <Button
+                    key={profile.id}
+                    variant="outline"
+                    size="sm"
+                    disabled={isConnecting}
+                    onClick={() => handleProfileQuickConnect(profile.id)}
+                    className="gap-1.5"
+                  >
+                    <span className={`size-2 rounded-full ${colorTag?.className ?? "bg-muted-foreground"}`} />
+                    {profile.name}
+                  </Button>
+                );
+              })}
+            </div>
+            <Separator />
+          </div>
+        )}
 
         <Form {...form}>
           <form
