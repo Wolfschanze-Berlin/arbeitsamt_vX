@@ -291,6 +291,55 @@ function SessionManager({ renderConnectionDialog, className }: SessionManagerPro
     [addSession],
   );
 
+  // ------------------------------------------------------------------
+  // Pop-out: detach session to a new Tauri window
+  // ------------------------------------------------------------------
+
+  const popOutSession = useCallback(
+    async (id: string) => {
+      const session = sessionsRef.current.find((s) => s.id === id);
+      if (!session?.tauriSessionId) return;
+
+      try {
+        const { WebviewWindow } = await import("@tauri-apps/api/webviewWindow");
+
+        const windowLabel = `ssh-popout-${Date.now().toString(36)}`;
+        const url = `/ssh-popout?sessionId=${encodeURIComponent(session.tauriSessionId)}&label=${encodeURIComponent(session.label)}`;
+
+        // Create a new Tauri window pointing at the pop-out route
+        new WebviewWindow(windowLabel, {
+          url,
+          title: session.label,
+          width: 800,
+          height: 600,
+          decorations: true,
+          center: true,
+        });
+
+        // Clean up the disconnect listener for this session (pop-out window owns it now)
+        unlistenRefs.current.get(id)?.();
+        unlistenRefs.current.delete(id);
+
+        // Remove the terminal ref
+        terminalRefs.current.delete(id);
+
+        // Remove the session from the main window
+        setSessions((prev) => prev.filter((s) => s.id !== id));
+        setActiveId((currentActive) => {
+          if (currentActive !== id) return currentActive;
+          const remaining = sessionsRef.current.filter((s) => s.id !== id);
+          if (remaining.length === 0) return null;
+          const removedIndex = sessionsRef.current.findIndex((s) => s.id === id);
+          const nextIndex = Math.min(removedIndex, remaining.length - 1);
+          return remaining[nextIndex].id;
+        });
+      } catch {
+        // WebviewWindow not available (dev mode in browser)
+      }
+    },
+    [],
+  );
+
   const handleTabReorder = useCallback((reordered: SessionTab[]) => {
     setSessions((prev) => {
       // Preserve the full Session objects (with tauriSessionId) in new order.
@@ -318,6 +367,7 @@ function SessionManager({ renderConnectionDialog, className }: SessionManagerPro
           setDialogOpen(true);
         }}
         onReorder={handleTabReorder}
+        onPopOut={(id) => void popOutSession(id)}
       />
 
       {/* Terminal panels — ALL mounted, only active is visible */}

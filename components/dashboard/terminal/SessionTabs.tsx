@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
-import { Plus, X } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ExternalLink, Plus, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
@@ -24,6 +24,7 @@ interface SessionTabsProps {
   onClose: (id: string) => void;
   onAdd: () => void;
   onReorder: (tabs: SessionTab[]) => void;
+  onPopOut?: (id: string) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -51,10 +52,30 @@ function SessionTabs({
   onClose,
   onAdd,
   onReorder,
+  onPopOut,
 }: SessionTabsProps) {
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dropIndex, setDropIndex] = useState<number | null>(null);
   const dragNodeRef = useRef<HTMLButtonElement | null>(null);
+
+  // Context menu state
+  const [ctxMenu, setCtxMenu] = useState<{ id: string; x: number; y: number } | null>(null);
+
+  const handleContextMenu = useCallback(
+    (id: string, e: React.MouseEvent) => {
+      e.preventDefault();
+      setCtxMenu({ id, x: e.clientX, y: e.clientY });
+    },
+    [],
+  );
+
+  // Close context menu on click anywhere
+  useEffect(() => {
+    if (!ctxMenu) return;
+    const close = () => setCtxMenu(null);
+    window.addEventListener("click", close);
+    return () => window.removeEventListener("click", close);
+  }, [ctxMenu]);
 
   // ---- Drag handlers ----
 
@@ -104,6 +125,7 @@ function SessionTabs({
   // ---- Render ----
 
   return (
+    <>
     <div
       className={cn(
         "flex h-9 items-center gap-0.5 overflow-x-auto px-1",
@@ -129,6 +151,7 @@ function SessionTabs({
             onDrop={(e) => handleDrop(index, e)}
             onDragEnd={handleDragEnd}
             onClick={() => onSelect(tab.id)}
+            onContextMenu={(e) => handleContextMenu(tab.id, e)}
             className={cn(
               "group relative flex h-7 max-w-48 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-xs transition-colors select-none",
               "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
@@ -160,6 +183,33 @@ function SessionTabs({
               {tab.type}
             </span>
 
+            {/* Pop-out button */}
+            {onPopOut && (
+              <span
+                role="button"
+                tabIndex={0}
+                aria-label={`Open ${tab.label} in new window`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onPopOut(tab.id);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.stopPropagation();
+                    onPopOut(tab.id);
+                  }
+                }}
+                className={cn(
+                  "ml-auto flex size-4 shrink-0 items-center justify-center rounded-sm",
+                  "opacity-0 transition-opacity group-hover:opacity-100",
+                  isActive && "opacity-60",
+                  "hover:bg-accent hover:text-accent-foreground",
+                )}
+              >
+                <ExternalLink className="size-3" />
+              </span>
+            )}
+
             {/* Close button */}
             <span
               role="button"
@@ -176,7 +226,8 @@ function SessionTabs({
                 }
               }}
               className={cn(
-                "ml-auto flex size-4 shrink-0 items-center justify-center rounded-sm",
+                onPopOut ? "flex" : "ml-auto flex",
+                "size-4 shrink-0 items-center justify-center rounded-sm",
                 "opacity-0 transition-opacity group-hover:opacity-100",
                 isActive && "opacity-60",
                 "hover:bg-destructive/20 hover:text-destructive",
@@ -201,7 +252,45 @@ function SessionTabs({
       >
         <Plus className="size-4" />
       </button>
+
     </div>
+
+    {/* Context menu (outside tablist for a11y) */}
+    {ctxMenu && (
+      <div
+        className={cn(
+          "fixed z-50 min-w-36 rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-md",
+          "animate-in fade-in-0 zoom-in-95",
+        )}
+        style={{ top: ctxMenu.y, left: ctxMenu.x }}
+      >
+        {onPopOut && (
+          <button
+            type="button"
+            className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-xs hover:bg-accent hover:text-accent-foreground"
+            onClick={() => {
+              onPopOut(ctxMenu.id);
+              setCtxMenu(null);
+            }}
+          >
+            <ExternalLink className="size-3.5" />
+            Open in New Window
+          </button>
+        )}
+        <button
+          type="button"
+          className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-xs text-destructive hover:bg-destructive/10"
+          onClick={() => {
+            onClose(ctxMenu.id);
+            setCtxMenu(null);
+          }}
+        >
+          <X className="size-3.5" />
+          Close Tab
+        </button>
+      </div>
+    )}
+    </>
   );
 }
 

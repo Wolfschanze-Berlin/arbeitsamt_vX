@@ -9,6 +9,7 @@ import { SessionManager } from "@/components/dashboard/terminal";
 import { ConnectionDialog } from "@/components/dashboard/ssh/ConnectionDialog";
 import { SettingsProvider } from "@/context/settings-context";
 import { SelectedRepoProvider } from "@/context/selected-repo-context";
+import { useMenuListener } from "@/hooks/useMenuListener";
 
 export default function DashboardShell({
   children,
@@ -17,6 +18,7 @@ export default function DashboardShell({
 }) {
   const pathname = usePathname();
   const isSSH = pathname === "/ssh";
+  useMenuListener();
 
   // When switching back to the SSH view, trigger a resize so xterm.js
   // recalculates its dimensions (it can't measure while display:none).
