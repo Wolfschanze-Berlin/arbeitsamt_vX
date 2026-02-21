@@ -13,6 +13,7 @@ import {
   Box,
   Plug,
   Terminal,
+  Github,
   ChevronRight,
   type LucideIcon,
 } from "lucide-react";
@@ -52,6 +53,7 @@ const mainNavItems: NavItem[] = [
     subItems: [{ name: "Overview", path: "/" }],
   },
   { icon: Terminal, name: "SSH Terminal", path: "/ssh" },
+  { icon: Github, name: "GitHub", path: "/github" },
   { icon: Calendar, name: "Calendar", path: "/calendar" },
   { icon: UserCircle, name: "User Profile", path: "/profile" },
   {

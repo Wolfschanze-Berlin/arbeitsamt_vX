@@ -4,11 +4,13 @@ import Link from "next/link";
 import {
   Sidebar,
   SidebarContent,
+  SidebarFooter,
   SidebarHeader,
   SidebarRail,
   useSidebar,
 } from "@/components/ui/sidebar";
 import { NavMain } from "@/components/layout/nav-main";
+import { GithubProfileCard } from "@/components/dashboard/github/github-profile-card";
 
 export function AppSidebar() {
   const { state } = useSidebar();
@@ -32,6 +34,9 @@ export function AppSidebar() {
       <SidebarContent className="custom-scrollbar">
         <NavMain />
       </SidebarContent>
+      <SidebarFooter className="p-3">
+        <GithubProfileCard />
+      </SidebarFooter>
       <SidebarRail />
     </Sidebar>
   );
