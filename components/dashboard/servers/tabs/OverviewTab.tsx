@@ -30,8 +30,8 @@ interface DiskEntry {
   mountedOn: string;
 }
 
-// Cross-platform command: works on both Linux (/proc) and macOS (sysctl).
-const COMMAND = [
+// Cross-platform command: works on Linux (/proc), macOS (sysctl), and Windows (cmd/powershell).
+const UNIX_COMMAND = [
   "uname -a",
   "echo '---DELIM---'",
   // CPU: Linux uses /proc/cpuinfo, macOS uses sysctl
@@ -47,6 +47,47 @@ const COMMAND = [
   // IPs: Linux uses hostname -I, macOS uses ipconfig/ifconfig
   "hostname -I 2>/dev/null || (ifconfig 2>/dev/null | grep 'inet ' | grep -v 127.0.0.1 | awk '{print $2}' | tr '\\n' ' ')",
 ].join(" && ");
+
+// Windows: uses PowerShell to gather system info with the same ---DELIM--- structure.
+// Uses -EncodedCommand with a Base64-encoded script to avoid all shell escaping issues
+// when the default SSH shell is cmd.exe.
+function buildWindowsCommand(): string {
+  const psScript = `
+[System.Environment]::OSVersion.VersionString + ' ' + [System.Environment]::MachineName
+Write-Output '---DELIM---'
+(Get-CimInstance Win32_Processor).Name
+Write-Output '---DELIM---'
+$os = Get-CimInstance Win32_OperatingSystem; $total = [math]::Round($os.TotalVisibleMemorySize/1024); $free = [math]::Round($os.FreePhysicalMemory/1024); $used = $total - $free; Write-Output "Mem: $total $used $free"
+Write-Output '---DELIM---'
+Get-CimInstance Win32_LogicalDisk -Filter 'DriveType=3' | ForEach-Object { $s=[math]::Round($_.Size/1GB,1); $f=[math]::Round($_.FreeSpace/1GB,1); $u=$s-$f; $p=if($s -gt 0){[math]::Round($u/$s*100)}else{0}; Write-Output "$($_.DeviceID) $($s)G $($u)G $($f)G $($p)% $($_.DeviceID)\\" }
+Write-Output '---DELIM---'
+$boot=(Get-CimInstance Win32_OperatingSystem).LastBootUpTime; $span=(Get-Date)-$boot; Write-Output ("up {0}d {1}h {2}m" -f $span.Days,$span.Hours,$span.Minutes)
+Write-Output '---DELIM---'
+try { (Get-NetIPAddress -AddressFamily IPv4 -ErrorAction Stop | Where-Object { $_.IPAddress -ne '127.0.0.1' -and $_.PrefixOrigin -ne 'WellKnown' }).IPAddress -join ' ' } catch { 'N/A' }
+`.trim();
+
+  // Encode as UTF-16LE Base64 for -EncodedCommand
+  const bytes: number[] = [];
+  for (const ch of psScript) {
+    const code = ch.charCodeAt(0);
+    bytes.push(code & 0xff, (code >> 8) & 0xff);
+  }
+  const encoded = btoa(String.fromCharCode(...bytes));
+  return `powershell -NoProfile -EncodedCommand ${encoded}`;
+}
+
+// Lazily built on first use to avoid module-init issues with btoa.
+let _windowsCommand: string | null = null;
+function getWindowsCommand(): string {
+  if (!_windowsCommand) _windowsCommand = buildWindowsCommand();
+  return _windowsCommand;
+}
+
+// Probe: detect the remote OS. Outputs both cmd.exe and PowerShell env var syntax.
+// - cmd.exe:    %OS% expands to "Windows_NT", $env:OS is literal
+// - PowerShell: %OS% is literal, $env:OS expands to "Windows_NT"
+// - bash/zsh:   neither expands → no "Windows_NT" in output
+const OS_PROBE = "echo %OS% $env:OS";
 
 function parseRam(section: string): SystemInfo["ram"] {
   const lines = section.trim().split("\n");
@@ -129,8 +170,50 @@ function parseCpu(section: string): string {
   return match ? match[1].trim() : line || "Unknown";
 }
 
-function parseSystemInfo(raw: string): SystemInfo {
+function parseWindowsRam(section: string): SystemInfo["ram"] {
+  // Format from PowerShell: "Mem: <totalMB> <usedMB> <freeMB>"
+  const match = section.trim().match(/Mem:\s*(\d+)\s+(\d+)\s+(\d+)/);
+  if (!match) return { total: 0, used: 0, free: 0 };
+  return {
+    total: Math.round((parseInt(match[1], 10) / 1024) * 10) / 10,
+    used: Math.round((parseInt(match[2], 10) / 1024) * 10) / 10,
+    free: Math.round((parseInt(match[3], 10) / 1024) * 10) / 10,
+  };
+}
+
+function parseWindowsDisks(section: string): DiskEntry[] {
+  // Each line from PowerShell: "C: 237.9G 180.2G 57.7G 76% C:\ "
+  return section
+    .trim()
+    .split("\n")
+    .map((line) => {
+      const parts = line.trim().split(/\s+/);
+      if (parts.length < 5) return null;
+      return {
+        filesystem: parts[0],
+        size: parts[1],
+        used: parts[2],
+        avail: parts[3],
+        usePercent: parts[4],
+        mountedOn: parts.slice(5).join(" ").trim() || parts[0],
+      };
+    })
+    .filter((d): d is DiskEntry => d !== null);
+}
+
+function parseSystemInfo(raw: string, isWindows = false): SystemInfo {
   const sections = raw.split("---DELIM---");
+
+  if (isWindows) {
+    return {
+      os: sections[0]?.trim() ?? "Windows",
+      cpu: sections[1]?.trim() ?? "Unknown",
+      ram: parseWindowsRam(sections[2] ?? ""),
+      disks: parseWindowsDisks(sections[3] ?? ""),
+      uptime: sections[4]?.trim() ?? "Unknown",
+      ips: (sections[5]?.trim() ?? "").split(/\s+/).filter(Boolean),
+    };
+  }
 
   return {
     os: sections[0]?.trim() ?? "Unknown",
@@ -151,11 +234,19 @@ function OverviewTab({ sessionId }: OverviewTabProps) {
     setLoading(true);
     setError(null);
     try {
+      // Probe OS: "echo %OS% $env:OS" outputs "Windows_NT" on both cmd.exe and PowerShell
+      const probe = await tauriInvoke<string>("ssh_exec", {
+        sessionId,
+        command: OS_PROBE,
+      });
+      const isWindows = probe.includes("Windows_NT");
+      const command = isWindows ? getWindowsCommand() : UNIX_COMMAND;
+
       const result = await tauriInvoke<string>("ssh_exec", {
         sessionId,
-        command: COMMAND,
+        command,
       });
-      setInfo(parseSystemInfo(result));
+      setInfo(parseSystemInfo(result, isWindows));
     } catch (err) {
       const e = err as Record<string, unknown>;
       setError(typeof e?.message === "string" ? e.message : JSON.stringify(err));

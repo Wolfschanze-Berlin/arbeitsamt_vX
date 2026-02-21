@@ -365,6 +365,171 @@ pub async fn ssh_list_agent_keys() -> Result<Vec<AgentKeyInfo>, SshError> {
 }
 
 // ---------------------------------------------------------------------------
+// WSL detection
+// ---------------------------------------------------------------------------
+
+/// List WSL distributions installed on the local machine.
+///
+/// Runs `wsl -l -q` locally and parses the output. Returns an empty Vec on
+/// non-Windows systems or when WSL is not installed.
+#[tauri::command]
+pub async fn local_list_wsl_distros() -> Result<Vec<String>, SshError> {
+    // Only try on Windows
+    if std::env::consts::OS != "windows" {
+        return Ok(Vec::new());
+    }
+
+    let output = tokio::process::Command::new("wsl")
+        .args(["-l", "-q"])
+        .output()
+        .await
+        .map_err(|e| SshError::IoError(format!("Failed to run wsl: {}", e)))?;
+
+    if !output.status.success() {
+        // WSL not installed or not available
+        return Ok(Vec::new());
+    }
+
+    // WSL outputs UTF-16LE — convert properly
+    let raw = if output.stdout.len() >= 2 && output.stdout[0] == 0xFF && output.stdout[1] == 0xFE {
+        // Has BOM — decode UTF-16LE
+        let u16s: Vec<u16> = output.stdout[2..]
+            .chunks_exact(2)
+            .map(|c| u16::from_le_bytes([c[0], c[1]]))
+            .collect();
+        String::from_utf16_lossy(&u16s)
+    } else {
+        // Try UTF-16LE without BOM (common), then fall back to UTF-8
+        let u16s: Vec<u16> = output.stdout
+            .chunks_exact(2)
+            .map(|c| u16::from_le_bytes([c[0], c[1]]))
+            .collect();
+        let decoded = String::from_utf16_lossy(&u16s);
+        if decoded.chars().any(|c| c.is_alphanumeric()) {
+            decoded
+        } else {
+            String::from_utf8_lossy(&output.stdout).into_owned()
+        }
+    };
+
+    let distros: Vec<String> = raw
+        .replace('\0', "")
+        .replace('\u{feff}', "")
+        .lines()
+        .map(|l| l.trim().to_string())
+        .filter(|l| !l.is_empty())
+        .collect();
+
+    Ok(distros)
+}
+
+/// Probe a remote host for WSL distributions.
+///
+/// Performs a lightweight SSH connection (no PTY, no TerminalActor), checks if
+/// the remote OS is Windows, and if so runs `wsl -l -q` to list installed
+/// WSL distributions. Disconnects immediately after.
+///
+/// Returns an empty Vec for non-Windows hosts or hosts without WSL.
+#[tauri::command]
+pub async fn ssh_probe_wsl(host: String) -> Result<Vec<String>, SshError> {
+    AssertSend(async move {
+        // 1. Resolve SSH config for this host alias
+        let config = crate::ssh::config::resolve_host(&host)?;
+
+        // 2. Create a lightweight SSH client config (no keepalive needed)
+        let mut client_config = russh::client::Config::default();
+        client_config.inactivity_timeout = Some(Duration::from_secs(15));
+        let client_config = Arc::new(client_config);
+
+        // 3. Connect
+        let handler = ClientHandler::with_forwarding_table(
+            std::sync::Arc::new(dashmap::DashMap::new()),
+        );
+        let mut handle = tokio::time::timeout(
+            Duration::from_secs(10),
+            russh::client::connect(
+                client_config,
+                (config.hostname.as_str(), config.port),
+                handler,
+            ),
+        )
+        .await
+        .map_err(|_| SshError::Timeout(format!(
+            "WSL probe: connection to {}:{} timed out", config.hostname, config.port
+        )))?
+        .map_err(|e| SshError::ConnectionRefused(format!(
+            "WSL probe: {}:{}: {}", config.hostname, config.port, e
+        )))?;
+
+        // 4. Authenticate (auto — tries agent, keys, etc.)
+        let username = config.user.as_deref().unwrap_or("root");
+        authenticate_auto(&mut handle, username, config.identity_file.as_deref()).await?;
+
+        // 5. Probe OS via exec channel
+        let os_output = exec_oneshot(&handle, b"echo %OS% $env:OS", 5).await?;
+        if !os_output.contains("Windows_NT") {
+            // Not Windows — no WSL possible
+            let _ = handle.disconnect(russh::Disconnect::ByApplication, "", "").await;
+            return Ok(Vec::new());
+        }
+
+        // 6. List WSL distros
+        let raw = exec_oneshot(&handle, b"wsl -l -q", 10).await?;
+        let _ = handle.disconnect(russh::Disconnect::ByApplication, "", "").await;
+
+        // 7. Parse — strip UTF-16LE null bytes and BOM
+        let distros: Vec<String> = raw
+            .replace('\0', "")
+            .replace('\u{feff}', "")
+            .lines()
+            .map(|l| l.trim().to_string())
+            .filter(|l| !l.is_empty())
+            .collect();
+
+        Ok(distros)
+    })
+    .await
+}
+
+/// Execute a single command on a connected (but not session-managed) SSH handle.
+/// Returns stdout as a String. Used for lightweight probes.
+async fn exec_oneshot(
+    handle: &russh::client::Handle<ClientHandler>,
+    command: &[u8],
+    timeout_secs: u64,
+) -> Result<String, SshError> {
+    let mut channel = handle
+        .channel_open_session()
+        .await
+        .map_err(|e| SshError::ChannelClosed(format!("exec_oneshot: open channel: {}", e)))?;
+    channel
+        .exec(true, command)
+        .await
+        .map_err(|e| SshError::ChannelClosed(format!("exec_oneshot: exec: {}", e)))?;
+
+    let mut stdout = Vec::new();
+    let result = tokio::time::timeout(Duration::from_secs(timeout_secs), async {
+        loop {
+            match channel.wait().await {
+                Some(russh::ChannelMsg::Data { data }) => stdout.extend_from_slice(&data),
+                Some(russh::ChannelMsg::ExitStatus { .. }) => {}
+                None => break,
+                _ => {}
+            }
+        }
+    })
+    .await;
+
+    if result.is_err() {
+        return Err(SshError::Timeout(format!(
+            "exec_oneshot: timed out after {}s", timeout_secs
+        )));
+    }
+
+    Ok(String::from_utf8_lossy(&stdout).into_owned())
+}
+
+// ---------------------------------------------------------------------------
 // Exec channel command (non-interactive, one-shot)
 // ---------------------------------------------------------------------------
 

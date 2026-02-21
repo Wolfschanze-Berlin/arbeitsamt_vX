@@ -15,6 +15,15 @@ interface ResolvedHost {
   status: ServerStatus;
 }
 
+interface WslEntry {
+  distro: string;
+  parentAlias: string;
+  parentHostname: string;
+  port: number;
+  username: string;
+  status: ServerStatus;
+}
+
 interface SshResolveResult {
   hostname: string;
   port: number;
@@ -24,12 +33,14 @@ interface SshResolveResult {
 
 export default function ServersPage() {
   const [hosts, setHosts] = useState<ResolvedHost[]>([]);
+  const [wslEntries, setWslEntries] = useState<WslEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const loadHosts = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setWslEntries([]);
 
     try {
       const aliases = await tauriInvoke<string[]>("ssh_list_config_hosts");
@@ -72,9 +83,9 @@ export default function ServersPage() {
       setLoading(false);
 
       // Ping all hosts in parallel and update status individually
-      await Promise.all(
+      const pingResults = await Promise.all(
         resolved.map(async (host) => {
-          if (host.status === "unreachable") return;
+          if (host.status === "unreachable") return { alias: host.alias, reachable: false };
           try {
             const reachable = await tauriInvoke<boolean>("ssh_ping_host", {
               host: host.hostname,
@@ -87,15 +98,60 @@ export default function ServersPage() {
                   : h,
               ),
             );
+            return { alias: host.alias, reachable };
           } catch {
             setHosts((prev) =>
               prev.map((h) =>
                 h.alias === host.alias ? { ...h, status: "unreachable" } : h,
               ),
             );
+            return { alias: host.alias, reachable: false };
           }
         }),
       );
+
+      // Detect WSL distros from two sources in parallel:
+      // 1. Local machine (runs `wsl -l -q` directly)
+      // 2. Reachable remote hosts (lightweight SSH probe)
+      const reachableHosts = resolved.filter((h) =>
+        pingResults.some((p) => p.alias === h.alias && p.reachable),
+      );
+
+      const [localDistros, ...remoteResults] = await Promise.all([
+        // Local WSL detection
+        tauriInvoke<string[]>("local_list_wsl_distros").catch(() => [] as string[]),
+        // Remote WSL detection for each reachable host
+        ...reachableHosts.map(async (host) => {
+          try {
+            const distros = await tauriInvoke<string[]>(
+              "ssh_probe_wsl",
+              { host: host.alias },
+            );
+            return distros.map((distro) => ({
+              distro,
+              parentAlias: host.alias,
+              parentHostname: host.hostname,
+              port: host.port,
+              username: host.username,
+              status: "reachable" as ServerStatus,
+            }));
+          } catch {
+            return [] as WslEntry[];
+          }
+        }),
+      ]);
+
+      // Combine local + remote WSL entries
+      const localEntries: WslEntry[] = (localDistros as string[]).map((distro) => ({
+        distro,
+        parentAlias: "localhost",
+        parentHostname: "localhost",
+        port: 0,
+        username: "",
+        status: "reachable" as ServerStatus,
+      }));
+
+      setWslEntries([...localEntries, ...(remoteResults as WslEntry[][]).flat()]);
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Failed to load SSH hosts",
@@ -125,7 +181,7 @@ export default function ServersPage() {
     );
   }
 
-  if (hosts.length === 0) {
+  if (hosts.length === 0 && wslEntries.length === 0) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-2 p-8">
         <ServerOff className="text-muted-foreground size-10" />
@@ -148,6 +204,18 @@ export default function ServersPage() {
             port={host.port}
             username={host.username}
             status={host.status}
+          />
+        ))}
+        {wslEntries.map((wsl) => (
+          <ServerCard
+            key={`wsl-${wsl.parentAlias}-${wsl.distro}`}
+            alias={wsl.distro}
+            hostname={wsl.parentHostname}
+            port={wsl.port}
+            username={wsl.username}
+            status={wsl.status}
+            wslDistro={wsl.distro}
+            parentHost={wsl.parentAlias}
           />
         ))}
       </div>

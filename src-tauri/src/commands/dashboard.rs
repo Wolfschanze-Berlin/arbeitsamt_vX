@@ -105,6 +105,80 @@ else \
   ps -eo pid,pcpu,pmem,vsz,state,comm 2>/dev/null | sort -rnk2 | head -20; \
 fi";
 
+/// Detect the remote OS. Outputs both cmd.exe and PowerShell env var syntax.
+/// - cmd.exe:    `%OS%` expands to "Windows_NT", `$env:OS` is literal
+/// - PowerShell: `%OS%` is literal, `$env:OS` expands to "Windows_NT"
+/// - bash/zsh:   neither expands → no "Windows_NT" in output
+const OS_PROBE: &str = "echo %OS% $env:OS";
+
+/// Windows metrics via PowerShell, producing 7 ---DELIMITER--- sections:
+///   0: __WINDOWS__ + CPU usage per core (pre-computed percentages)
+///   1: Memory (MemTotal/MemFree/SwapTotal/SwapFree in KB, /proc/meminfo style)
+///   2: Load average (approximated from processor queue + CPU%)
+///   3: Disk I/O bytes (cumulative)
+///   4: Network bytes (cumulative rx/tx)
+///   5: Uptime in seconds
+///   6: Top 20 processes
+const WINDOWS_METRICS_PS: &str = r#"
+$d = '---DELIMITER---'
+# -- Section 0: CPU --
+Write-Output '__WINDOWS__'
+$cpus = Get-CimInstance Win32_PerfFormattedData_PerfOS_Processor
+foreach ($c in ($cpus | Sort-Object Name)) {
+  $idle = [uint64]$c.PercentIdleTime
+  $total = 100
+  if ($c.Name -eq '_Total') { Write-Output "cpu $idle $total" }
+  else { Write-Output "cpu$($c.Name) $idle $total" }
+}
+Write-Output $d
+# -- Section 1: Memory (KB, mimics /proc/meminfo keys) --
+$os = Get-CimInstance Win32_OperatingSystem
+$pi = Get-CimInstance Win32_PageFileUsage -ErrorAction SilentlyContinue | Measure-Object -Property CurrentUsage,AllocatedBaseSize -Sum
+$swapTotalKB = if($pi.Count -gt 0){[uint64]($os.SizeStoredInPagingFiles)}else{0}
+$swapFreeKB = $swapTotalKB - [uint64]$os.SizeStoredInPagingFiles + [uint64]$os.FreeSpaceInPagingFiles
+Write-Output "MemTotal: $($os.TotalVisibleMemorySize) kB"
+Write-Output "MemFree: $($os.FreePhysicalMemory) kB"
+Write-Output "Buffers: 0 kB"
+Write-Output "Cached: 0 kB"
+Write-Output "SwapTotal: $swapTotalKB kB"
+Write-Output "SwapFree: $swapFreeKB kB"
+Write-Output $d
+# -- Section 2: Load average (approx from CPU%) --
+$cpuLoad = ($cpus | Where-Object {$_.Name -eq '_Total'}).PercentProcessorTime
+$la = [math]::Round($cpuLoad / 100.0 * (Get-CimInstance Win32_Processor).NumberOfLogicalProcessors, 2)
+Write-Output "$la $la $la"
+Write-Output $d
+# -- Section 3: Disk I/O (cumulative bytes) --
+$disk = Get-CimInstance Win32_PerfRawData_PerfDisk_PhysicalDisk | Where-Object {$_.Name -eq '_Total'}
+if ($disk) {
+  Write-Output "disk_read_bytes $($disk.DiskReadBytesPerSec)"
+  Write-Output "disk_write_bytes $($disk.DiskWriteBytesPerSec)"
+} else { Write-Output "disk_read_bytes 0"; Write-Output "disk_write_bytes 0" }
+Write-Output $d
+# -- Section 4: Network (cumulative bytes) --
+$rx = 0; $tx = 0
+try {
+  Get-NetAdapterStatistics -ErrorAction Stop | ForEach-Object { $rx += $_.ReceivedBytes; $tx += $_.SentBytes }
+} catch {
+  $nics = Get-CimInstance Win32_PerfRawData_Tcpip_NetworkInterface -ErrorAction SilentlyContinue
+  if ($nics) { $nics | ForEach-Object { $rx += $_.BytesReceivedPerSec; $tx += $_.BytesSentPerSec } }
+}
+Write-Output "net_rx_bytes $rx"
+Write-Output "net_tx_bytes $tx"
+Write-Output $d
+# -- Section 5: Uptime (seconds) --
+$boot = $os.LastBootUpTime
+$up = [uint64]((Get-Date) - $boot).TotalSeconds
+Write-Output "$up 0"
+Write-Output $d
+# -- Section 6: Top 20 processes --
+Get-Process | Sort-Object CPU -Descending -ErrorAction SilentlyContinue | Select-Object -First 20 | ForEach-Object {
+  $cpuPct = if($_.CPU){[math]::Round($_.CPU / ((Get-Date)-$_.StartTime).TotalSeconds * 100, 1)}else{0}
+  $memPct = [math]::Round($_.WorkingSet64 / $os.TotalVisibleMemorySize / 1024 * 100, 1)
+  Write-Output "$($_.Id) $cpuPct $memPct $([math]::Round($_.VirtualMemorySize64/1024)) Running $($_.ProcessName)"
+}
+"#;
+
 // ---------------------------------------------------------------------------
 // Parsing helpers
 // ---------------------------------------------------------------------------
@@ -538,14 +612,123 @@ fn compute_cpu_usage(
 }
 
 // ---------------------------------------------------------------------------
+// Windows parsing helpers
+// ---------------------------------------------------------------------------
+
+/// Parse Windows CPU output: "__WINDOWS__\ncpu <idle> <total>\ncpu0 <idle> <total>\n..."
+/// Same (idle, total) tuple format as Linux, where index 0 is the aggregate.
+fn parse_windows_cpu(section: &str) -> Vec<(u64, u64)> {
+    let mut cores = Vec::new();
+    for line in section.lines() {
+        if !line.starts_with("cpu") { continue; }
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        if parts.len() < 3 { continue; }
+        let idle: u64 = parts[1].parse().unwrap_or(0);
+        let total: u64 = parts[2].parse().unwrap_or(100);
+        cores.push((idle, total));
+    }
+    if cores.is_empty() {
+        cores.push((50, 100)); // fallback
+    }
+    cores
+}
+
+/// Parse Windows "key value" pairs for disk/net counters.
+/// Example input: "disk_read_bytes 12345\ndisk_write_bytes 67890"
+fn parse_windows_disk_net(section: &str, key_a: &str, key_b: &str) -> (u64, u64) {
+    let mut a = 0u64;
+    let mut b = 0u64;
+    for line in section.lines() {
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        if parts.len() < 2 { continue; }
+        if parts[0] == key_a { a = parts[1].parse().unwrap_or(0); }
+        if parts[0] == key_b { b = parts[1].parse().unwrap_or(0); }
+    }
+    (a, b)
+}
+
+/// Parse Windows process list: "PID CPU% MEM% VSZ State Name"
+fn parse_windows_processes(section: &str) -> Vec<ProcessInfo> {
+    let mut procs = Vec::new();
+    for line in section.lines() {
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        if parts.len() < 6 { continue; }
+        let pid = match parts[0].parse::<u32>() {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+        procs.push(ProcessInfo {
+            pid,
+            cpu_pct: parts[1].parse().unwrap_or(0.0),
+            mem_pct: parts[2].parse().unwrap_or(0.0),
+            vsz: parts[3].parse().unwrap_or(0),
+            state: parts[4].to_string(),
+            name: parts[5..].join(" "),
+        });
+    }
+    procs
+}
+
+// ---------------------------------------------------------------------------
 // Tauri command
 // ---------------------------------------------------------------------------
+
+/// Build the Windows PowerShell metrics command with -EncodedCommand to avoid
+/// shell escaping issues when the default SSH shell is cmd.exe.
+fn build_windows_metrics_command() -> String {
+    use base64::Engine;
+    let utf16: Vec<u8> = WINDOWS_METRICS_PS
+        .encode_utf16()
+        .flat_map(|u| u.to_le_bytes())
+        .collect();
+    let encoded = base64::engine::general_purpose::STANDARD.encode(&utf16);
+    format!("powershell -NoProfile -EncodedCommand {}", encoded)
+}
+
+/// Open an exec channel, run `command`, and return the stdout as a String.
+async fn exec_and_read(
+    ssh_handle: &std::sync::Arc<tokio::sync::Mutex<russh::client::Handle<crate::ssh::handler::ClientHandler>>>,
+    command: &[u8],
+    timeout_secs: u64,
+) -> Result<String, SshError> {
+    let handle = ssh_handle.lock().await;
+    let mut channel = handle
+        .channel_open_session()
+        .await
+        .map_err(|e| SshError::ChannelClosed(format!("Failed to open exec channel: {}", e)))?;
+    channel
+        .exec(true, command)
+        .await
+        .map_err(|e| SshError::ChannelClosed(format!("exec failed: {}", e)))?;
+    drop(handle);
+
+    let mut stdout = Vec::new();
+    let result = tokio::time::timeout(Duration::from_secs(timeout_secs), async {
+        loop {
+            match channel.wait().await {
+                Some(russh::ChannelMsg::Data { data }) => stdout.extend_from_slice(&data),
+                Some(russh::ChannelMsg::ExitStatus { .. }) => {}
+                None => break,
+                _ => {}
+            }
+        }
+    })
+    .await;
+
+    if result.is_err() {
+        return Err(SshError::Timeout(format!(
+            "Command timed out after {} seconds", timeout_secs
+        )));
+    }
+
+    Ok(String::from_utf8_lossy(&stdout).into_owned())
+}
 
 /// Collect server metrics from a remote host over an existing SSH session.
 ///
 /// Executes a compound command via an exec channel, parses /proc filesystem
-/// data, and computes delta-based rates (CPU%, disk I/O, network) using
-/// snapshots stored in AppState.
+/// data (or PowerShell output on Windows), and computes delta-based rates
+/// (CPU%, disk I/O, network) using snapshots stored in AppState.
 #[tauri::command]
 pub async fn ssh_get_metrics(
     state: State<'_, AppState>,
@@ -554,48 +737,20 @@ pub async fn ssh_get_metrics(
     AssertSend(async move {
         let now = Instant::now();
 
-        // 1. Get SSH handle and execute compound command
+        // 1. Get SSH handle
         let ssh_handle = state.ssh_manager.get_ssh_handle(&session_id)?;
-        let handle = ssh_handle.lock().await;
 
-        let mut channel = handle
-            .channel_open_session()
-            .await
-            .map_err(|e| {
-                SshError::ChannelClosed(format!("Failed to open exec channel: {}", e))
-            })?;
+        // 1a. Probe OS: "echo %OS% $env:OS" outputs "Windows_NT" on both cmd.exe and PowerShell
+        let probe = exec_and_read(&ssh_handle, OS_PROBE.as_bytes(), 5).await?;
+        let is_windows = probe.contains("Windows_NT");
 
-        channel
-            .exec(true, METRICS_COMMAND.as_bytes())
-            .await
-            .map_err(|e| SshError::ChannelClosed(format!("exec failed: {}", e)))?;
-
-        // Drop handle lock before reading to avoid deadlocks
-        drop(handle);
-
-        // 2. Read output with 15s timeout
-        let mut stdout = Vec::new();
-        let result = tokio::time::timeout(Duration::from_secs(15), async {
-            loop {
-                match channel.wait().await {
-                    Some(russh::ChannelMsg::Data { data }) => {
-                        stdout.extend_from_slice(&data);
-                    }
-                    Some(russh::ChannelMsg::ExitStatus { .. }) => {}
-                    None => break,
-                    _ => {}
-                }
-            }
-        })
-        .await;
-
-        if result.is_err() {
-            return Err(SshError::Timeout(
-                "Metrics command timed out after 15 seconds".into(),
-            ));
-        }
-
-        let raw = String::from_utf8_lossy(&stdout);
+        // 1b. Execute the appropriate metrics command
+        let raw = if is_windows {
+            let cmd = build_windows_metrics_command();
+            exec_and_read(&ssh_handle, cmd.as_bytes(), 15).await?
+        } else {
+            exec_and_read(&ssh_handle, METRICS_COMMAND.as_bytes(), 15).await?
+        };
 
         // 3. Split by delimiter
         let sections: Vec<&str> = raw.split(DELIMITER).collect();
@@ -606,12 +761,25 @@ pub async fn ssh_get_metrics(
             )));
         }
 
-        // 4. Parse each section — detect macOS by __MACOS__ marker
+        // 4. Parse each section — detect OS by marker in section[0]
         let is_macos = sections[0].contains("__MACOS__");
+        let is_windows_os = sections[0].contains("__WINDOWS__");
 
         let (cpu_times, mem_total, mem_free, buffers, cached, swap_total, swap_free,
              load_avg, disk_read_sectors, disk_write_sectors,
-             net_rx_bytes, net_tx_bytes, uptime_secs, processes) = if is_macos {
+             net_rx_bytes, net_tx_bytes, uptime_secs, processes) = if is_windows_os {
+            let cpu_times = parse_windows_cpu(sections[0]);
+            let (mt, mf, bu, ca, st, sf) = parse_meminfo(sections[1]); // same format
+            let la = parse_loadavg(sections[2]); // same "x y z" format
+            // Windows reports raw bytes — convert to 512-byte "sectors" so the
+            // shared delta math (* 512) produces correct byte rates.
+            let (drb, dwb) = parse_windows_disk_net(sections[3], "disk_read_bytes", "disk_write_bytes");
+            let (dr, dw) = (drb / 512, dwb / 512);
+            let (nr, nt) = parse_windows_disk_net(sections[4], "net_rx_bytes", "net_tx_bytes");
+            let up = parse_uptime(sections[5]); // same "secs idle" format
+            let procs = parse_windows_processes(sections[6]);
+            (cpu_times, mt, mf, bu, ca, st, sf, la, dr, dw, nr, nt, up, procs)
+        } else if is_macos {
             let cpu_times = parse_macos_cpu(sections[0]);
             let (mt, mf, bu, ca, st, sf) = parse_macos_mem(sections[1]);
             let la = parse_macos_loadavg(sections[2]);
@@ -711,6 +879,46 @@ pub async fn ssh_get_metrics(
             processes,
             uptime_secs,
         })
+    })
+    .await
+}
+
+// ---------------------------------------------------------------------------
+// WSL distro detection
+// ---------------------------------------------------------------------------
+
+/// List WSL distributions installed on a remote Windows host.
+///
+/// Runs `wsl -l -q` over an SSH exec channel and parses the output.
+/// Returns an empty Vec if the host is not Windows or has no WSL distros.
+#[tauri::command]
+pub async fn ssh_list_wsl_distros(
+    state: State<'_, AppState>,
+    session_id: String,
+) -> Result<Vec<String>, SshError> {
+    AssertSend(async move {
+        let ssh_handle = state.ssh_manager.get_ssh_handle(&session_id)?;
+
+        // 1. Probe OS
+        let probe = exec_and_read(&ssh_handle, OS_PROBE.as_bytes(), 5).await?;
+        if !probe.contains("Windows_NT") {
+            return Ok(Vec::new());
+        }
+
+        // 2. Run `wsl -l -q` — outputs one distro name per line.
+        //    WSL outputs UTF-16LE with BOM, so we handle that.
+        let raw = exec_and_read(&ssh_handle, b"wsl -l -q", 10).await?;
+
+        // 3. Parse: strip null bytes (UTF-16LE artifacts), BOM, and empty lines
+        let distros: Vec<String> = raw
+            .replace('\0', "")
+            .replace('\u{feff}', "")
+            .lines()
+            .map(|l| l.trim().to_string())
+            .filter(|l| !l.is_empty())
+            .collect();
+
+        Ok(distros)
     })
     .await
 }

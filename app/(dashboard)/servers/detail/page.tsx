@@ -14,8 +14,9 @@ const ServerDetailShell = dynamic(
 export default function ServerDetailPage() {
   const searchParams = useSearchParams();
   const host = searchParams.get("host") ?? "";
+  const wslDistro = searchParams.get("wsl") ?? undefined;
 
   if (!host) return null;
 
-  return <ServerDetailShell key={host} host={host} />;
+  return <ServerDetailShell key={`${host}-${wslDistro ?? ""}`} host={host} wslDistro={wslDistro} />;
 }

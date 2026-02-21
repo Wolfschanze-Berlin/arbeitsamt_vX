@@ -77,13 +77,15 @@ type PasswordFormValues = z.infer<typeof passwordSchema>;
 
 interface ServerDetailShellProps {
   host: string;
+  /** If set, commands run inside this WSL distro on the host */
+  wslDistro?: string;
 }
 
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
-function ServerDetailShell({ host }: ServerDetailShellProps) {
+function ServerDetailShell({ host, wslDistro }: ServerDetailShellProps) {
   const [connState, setConnState] = useState<ConnectionState>({
     status: "idle",
   });
@@ -284,11 +286,11 @@ function ServerDetailShell({ host }: ServerDetailShellProps) {
       return <IdleState />;
 
     case "connecting":
-      return <ConnectingState host={host} />;
+      return <ConnectingState host={wslDistro ? `${wslDistro} (via ${host})` : host} />;
 
     case "connected":
       return (
-        <ServerDetailTabs sessionId={connState.sessionId} host={host} />
+        <ServerDetailTabs sessionId={connState.sessionId} host={host} wslDistro={wslDistro} />
       );
 
     case "auth-failed":
