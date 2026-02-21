@@ -33,7 +33,12 @@
     {
       "identifier": "http:default",
       "allow": [
-        { "url": "https://api.github.com/**" }
+        {
+          "url": "https://api.github.com/**"
+        },
+        {
+          "url": "https://**.*/**"
+        }
       ]
     },
     "websocket:default",
