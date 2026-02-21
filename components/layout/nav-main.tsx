@@ -12,6 +12,7 @@ import {
   PieChart,
   Box,
   Plug,
+  Terminal,
   ChevronRight,
   type LucideIcon,
 } from "lucide-react";
@@ -73,6 +74,7 @@ const mainNavItems: NavItem[] = [
 ];
 
 const othersNavItems: NavItem[] = [
+  { icon: Terminal, name: "Greet Demo", path: "/greet" },
   {
     icon: PieChart,
     name: "Charts",
