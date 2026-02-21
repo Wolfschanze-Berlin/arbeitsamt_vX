@@ -48,6 +48,22 @@ impl<F: std::future::Future> std::future::Future for AssertSend<F> {
     }
 }
 
+/// Stateless TCP reachability check — no SSH auth, no session state.
+/// Returns `true` if a TCP handshake to `host:port` succeeds within 3 seconds.
+#[tauri::command]
+pub async fn ssh_ping_host(host: String, port: u16) -> Result<bool, SshError> {
+    let addr = format!("{}:{}", host, port);
+    match tokio::time::timeout(
+        Duration::from_secs(3),
+        tokio::net::TcpStream::connect(&addr),
+    )
+    .await
+    {
+        Ok(Ok(_)) => Ok(true),
+        _ => Ok(false),
+    }
+}
+
 /// Connect to an SSH server and return the session ID.
 /// The `output` channel streams terminal data (raw bytes) to the frontend.
 ///
@@ -343,4 +359,85 @@ pub async fn ssh_check_agent() -> Result<bool, SshError> {
 #[tauri::command]
 pub async fn ssh_list_agent_keys() -> Result<Vec<AgentKeyInfo>, SshError> {
     list_agent_key_info().await
+}
+
+// ---------------------------------------------------------------------------
+// Exec channel command (non-interactive, one-shot)
+// ---------------------------------------------------------------------------
+
+/// Execute a command on an existing SSH session via a new exec channel.
+/// Opens a dedicated session channel (separate from the PTY shell), runs the
+/// command, collects stdout, and returns it. Stderr is reported in the error
+/// if the command exits with a non-zero code.
+#[tauri::command]
+pub async fn ssh_exec(
+    state: State<'_, AppState>,
+    session_id: String,
+    command: String,
+) -> Result<String, SshError> {
+    AssertSend(async move {
+        // 1. Get handle
+        let ssh_handle = state.ssh_manager.get_ssh_handle(&session_id)?;
+        let handle = ssh_handle.lock().await;
+
+        // 2. Open a new session channel for exec
+        let mut channel = handle
+            .channel_open_session()
+            .await
+            .map_err(|e| SshError::ChannelClosed(format!("Failed to open exec channel: {}", e)))?;
+
+        // 3. Execute command
+        channel
+            .exec(true, command.as_bytes())
+            .await
+            .map_err(|e| SshError::ChannelClosed(format!("exec failed: {}", e)))?;
+
+        // IMPORTANT: Drop the handle lock before reading output to avoid deadlocks.
+        drop(handle);
+
+        // 4. Read output with 30s timeout
+        let mut stdout = Vec::new();
+        let mut stderr = Vec::new();
+        let mut exit_code: Option<u32> = None;
+
+        let result = tokio::time::timeout(Duration::from_secs(30), async {
+            loop {
+                match channel.wait().await {
+                    Some(russh::ChannelMsg::Data { data }) => {
+                        stdout.extend_from_slice(&data);
+                    }
+                    Some(russh::ChannelMsg::ExtendedData { data, ext }) if ext == 1 => {
+                        stderr.extend_from_slice(&data);
+                    }
+                    Some(russh::ChannelMsg::ExitStatus { exit_status }) => {
+                        exit_code = Some(exit_status);
+                    }
+                    None => break,
+                    _ => {}
+                }
+            }
+        })
+        .await;
+
+        if result.is_err() {
+            return Err(SshError::Timeout(
+                "Command timed out after 30 seconds".into(),
+            ));
+        }
+
+        // 5. Check exit code — return stderr in error for non-zero exits
+        let output = String::from_utf8_lossy(&stdout).into_owned();
+        if let Some(code) = exit_code {
+            if code != 0 {
+                let err_msg = String::from_utf8_lossy(&stderr);
+                return Err(SshError::IoError(format!(
+                    "Command exited with code {}: {}",
+                    code, err_msg
+                )));
+            }
+        }
+
+        Ok(output)
+    })
+    .await
 }

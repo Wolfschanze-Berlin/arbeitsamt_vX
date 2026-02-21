@@ -251,6 +251,7 @@ pub fn run() {
         .manage(state::AppState::new())
         .invoke_handler(tauri::generate_handler![
             greet,
+            commands::ssh::ssh_ping_host,
             commands::ssh::ssh_connect,
             commands::ssh::ssh_write,
             commands::ssh::ssh_resize,
@@ -266,6 +267,7 @@ pub fn run() {
             commands::ssh::ssh_discover_keys,
             commands::ssh::ssh_check_agent,
             commands::ssh::ssh_list_agent_keys,
+            commands::ssh::ssh_exec,
             commands::sftp::sftp_list_dir,
             commands::sftp::sftp_mkdir,
             commands::sftp::sftp_delete,
@@ -285,6 +287,9 @@ pub fn run() {
             commands::pty::pty_resize,
             commands::pty::pty_close,
             commands::github::get_github_token,
+            commands::dashboard::ssh_get_metrics,
+            commands::docker::ssh_docker_data,
+            commands::docker::ssh_docker_logs,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
