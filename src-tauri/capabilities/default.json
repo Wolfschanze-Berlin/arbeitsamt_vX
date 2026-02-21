@@ -2,9 +2,40 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Capability for the main window",
-  "windows": ["main"],
+  "windows": [
+    "main"
+  ],
   "permissions": [
     "core:default",
-    "opener:default"
+    "core:event:default",
+    "opener:default",
+    "log:default",
+    "store:default",
+    "process:default",
+    "os:default",
+    "dialog:default",
+    "fs:default",
+    "clipboard-manager:allow-read-text",
+    "clipboard-manager:allow-write-text",
+    "clipboard-manager:allow-read-image",
+    "clipboard-manager:allow-write-image",
+    "notification:default",
+    "shell:default",
+    "global-shortcut:allow-is-registered",
+    "global-shortcut:allow-register",
+    "global-shortcut:allow-unregister",
+    "autostart:allow-enable",
+    "autostart:allow-disable",
+    "autostart:allow-is-enabled",
+    "cli:default",
+    "positioner:default",
+    "http:default",
+    "websocket:default",
+    "upload:default",
+    "sql:default",
+    "sql:allow-execute",
+    "deep-link:default",
+    "updater:default",
+    "window-state:default"
   ]
 }

@@ -14,11 +14,23 @@
       {
         "title": "arbeitsamtvx",
         "width": 800,
-        "height": 600
+        "height": 600,
+        "visible": false
       }
     ],
     "security": {
       "csp": null
+    }
+  },
+  "plugins": {
+    "cli": {
+      "description": "arbeitsamtvx CLI",
+      "args": []
+    },
+    "deep-link": {
+      "desktop": {
+        "schemes": ["arbeitsamt"]
+      }
     }
   },
   "bundle": {
