@@ -1,4 +1,5 @@
 // Known hosts TOFU verification — Wave 3
+#![allow(dead_code)]
 
 use std::collections::HashMap;
 use std::fs;

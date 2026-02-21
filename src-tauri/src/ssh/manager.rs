@@ -231,6 +231,7 @@ impl SshManager {
     }
 
     /// Close and remove a cached SFTP session.
+    #[allow(dead_code)]
     pub async fn close_sftp_session(&self, session_id: &str) -> Result<(), SshError> {
         if let Some((_, sftp)) = self.sftp_sessions.remove(session_id) {
             let _ = sftp.close().await;

@@ -5,6 +5,7 @@ use serde::Serialize;
 pub enum SshError {
     AuthFailed(String),
     ConnectionRefused(String),
+    #[allow(dead_code)]
     HostKeyMismatch(String),
     SessionNotFound(String),
     ChannelClosed(String),

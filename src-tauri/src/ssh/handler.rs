@@ -23,6 +23,7 @@ pub struct ClientHandler {
 
 impl ClientHandler {
     /// Create a new handler with an empty forwarding table.
+    #[allow(dead_code)]
     pub fn new() -> Self {
         Self {
             forwarding_table: Arc::new(DashMap::new()),
