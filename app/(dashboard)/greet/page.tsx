@@ -25,7 +25,7 @@ export default function GreetPage() {
   }
 
   return (
-    <div className="flex items-center justify-center min-h-[60vh]">
+    <div className="mx-auto max-w-screen-2xl p-4 md:p-6 flex items-center justify-center min-h-[60vh]">
       <Card className="w-full max-w-md">
         <CardHeader>
           <CardTitle>Tauri Greet Demo</CardTitle>

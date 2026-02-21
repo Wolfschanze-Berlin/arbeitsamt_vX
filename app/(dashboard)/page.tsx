@@ -9,7 +9,7 @@ import { RecentOrdersTable } from "@/components/dashboard/recent-orders-table";
 
 export default function DashboardPage() {
   return (
-    <div className="grid grid-cols-12 gap-4 md:gap-6">
+    <div className="mx-auto max-w-screen-2xl p-4 md:p-6 grid grid-cols-12 gap-4 md:gap-6">
       <div className="col-span-12 space-y-6 xl:col-span-7">
         <MetricsGrid />
         <MonthlySalesChart />

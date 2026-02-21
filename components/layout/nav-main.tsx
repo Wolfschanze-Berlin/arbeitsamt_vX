@@ -51,6 +51,7 @@ const mainNavItems: NavItem[] = [
     name: "Dashboard",
     subItems: [{ name: "Overview", path: "/" }],
   },
+  { icon: Terminal, name: "SSH Terminal", path: "/ssh" },
   { icon: Calendar, name: "Calendar", path: "/calendar" },
   { icon: UserCircle, name: "User Profile", path: "/profile" },
   {
