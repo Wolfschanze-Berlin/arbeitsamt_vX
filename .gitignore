@@ -46,3 +46,4 @@ target/rust-analyzer/flycheck0/stdout
 .env
 .env*
 !.env.sample
+tsconfig.tsbuildinfo
