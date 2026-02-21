@@ -94,6 +94,50 @@ export interface GithubEvent {
   payload: Record<string, unknown>;
 }
 
+export interface GithubReadme {
+  name: string;
+  content: string;
+  encoding: string;
+  html_url: string;
+}
+
+export interface GithubCommit {
+  sha: string;
+  commit: {
+    message: string;
+    author: { name: string; date: string };
+  };
+  author: { login: string; avatar_url: string } | null;
+  html_url: string;
+}
+
+export interface GithubIssue {
+  number: number;
+  title: string;
+  state: string;
+  user: { login: string; avatar_url: string };
+  labels: { name: string; color: string }[];
+  created_at: string;
+  html_url: string;
+}
+
+export interface GithubPR {
+  number: number;
+  title: string;
+  state: string;
+  user: { login: string; avatar_url: string };
+  draft: boolean;
+  created_at: string;
+  html_url: string;
+}
+
+export interface GithubContributor {
+  login: string;
+  avatar_url: string;
+  contributions: number;
+  html_url: string;
+}
+
 // ---------------------------------------------------------------------------
 // Core fetcher
 // ---------------------------------------------------------------------------
@@ -184,5 +228,68 @@ export function getUserOrgs(): Promise<GithubOrg[]> {
 export function getOrgMembers(orgName: string): Promise<GithubOrgMember[]> {
   return fetchGithub<GithubOrgMember[]>(
     `/orgs/${encodeURIComponent(orgName)}/members`,
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Repo detail functions
+// ---------------------------------------------------------------------------
+
+/** Raw README response from GitHub before base64 decoding. */
+interface GithubReadmeRaw {
+  name: string;
+  content: string;
+  encoding: string;
+  html_url: string;
+}
+
+export async function getRepoReadme(
+  owner: string,
+  repo: string,
+): Promise<GithubReadme> {
+  const raw = await fetchGithub<GithubReadmeRaw>(
+    `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/readme`,
+  );
+  return {
+    name: raw.name,
+    content: atob(raw.content.replace(/\n/g, "")),
+    encoding: raw.encoding,
+    html_url: raw.html_url,
+  };
+}
+
+export function getRepoCommits(
+  owner: string,
+  repo: string,
+): Promise<GithubCommit[]> {
+  return fetchGithub<GithubCommit[]>(
+    `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/commits?per_page=10`,
+  );
+}
+
+export function getRepoIssues(
+  owner: string,
+  repo: string,
+): Promise<GithubIssue[]> {
+  return fetchGithub<GithubIssue[]>(
+    `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/issues?state=open&per_page=10`,
+  );
+}
+
+export function getRepoPRs(
+  owner: string,
+  repo: string,
+): Promise<GithubPR[]> {
+  return fetchGithub<GithubPR[]>(
+    `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls?state=open&per_page=10`,
+  );
+}
+
+export function getRepoContributors(
+  owner: string,
+  repo: string,
+): Promise<GithubContributor[]> {
+  return fetchGithub<GithubContributor[]>(
+    `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contributors?per_page=10`,
   );
 }

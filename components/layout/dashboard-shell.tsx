@@ -8,6 +8,7 @@ import { AppHeader } from "@/components/layout/app-header";
 import { SessionManager } from "@/components/dashboard/terminal";
 import { ConnectionDialog } from "@/components/dashboard/ssh/ConnectionDialog";
 import { SettingsProvider } from "@/context/settings-context";
+import { SelectedRepoProvider } from "@/context/selected-repo-context";
 
 export default function DashboardShell({
   children,
@@ -29,6 +30,7 @@ export default function DashboardShell({
 
   return (
     <SettingsProvider>
+    <SelectedRepoProvider>
     <SidebarProvider>
       <AppSidebar />
       <SidebarInset>
@@ -57,6 +59,7 @@ export default function DashboardShell({
         </main>
       </SidebarInset>
     </SidebarProvider>
+    </SelectedRepoProvider>
     </SettingsProvider>
   );
 }

@@ -7,11 +7,21 @@ import {
   getUserActivity,
   getUserOrgs,
   getOrgMembers,
+  getRepoReadme,
+  getRepoCommits,
+  getRepoIssues,
+  getRepoPRs,
+  getRepoContributors,
   type GithubUser,
   type GithubRepo,
   type GithubEvent,
   type GithubOrg,
   type GithubOrgMember,
+  type GithubReadme,
+  type GithubCommit,
+  type GithubIssue,
+  type GithubPR,
+  type GithubContributor,
 } from "@/lib/github";
 import { tauriInvoke } from "@/lib/tauri";
 import { loadCache, saveCache } from "@/lib/github-cache";
@@ -104,6 +114,71 @@ export function useOrgMembers(orgName: string | null) {
     orgName ? `github:org-members:${orgName}` : null,
     orgName
       ? withCache(`orgs:members:${orgName}`, () => getOrgMembers(orgName))
+      : null,
+    OFFLINE_CONFIG,
+  );
+}
+
+/** README for a specific repository (lazy — pass `null` to skip). */
+export function useRepoReadme(owner: string | null, repo: string | null) {
+  return useSWR<GithubReadme>(
+    owner && repo ? `repo:readme:${owner}/${repo}` : null,
+    owner && repo
+      ? withCache(`repo:readme:${owner}/${repo}`, () =>
+          getRepoReadme(owner, repo),
+        )
+      : null,
+    OFFLINE_CONFIG,
+  );
+}
+
+/** Commits for a specific repository (lazy — pass `null` to skip). */
+export function useRepoCommits(owner: string | null, repo: string | null) {
+  return useSWR<GithubCommit[]>(
+    owner && repo ? `repo:commits:${owner}/${repo}` : null,
+    owner && repo
+      ? withCache(`repo:commits:${owner}/${repo}`, () =>
+          getRepoCommits(owner, repo),
+        )
+      : null,
+    OFFLINE_CONFIG,
+  );
+}
+
+/** Issues for a specific repository (lazy — pass `null` to skip). */
+export function useRepoIssues(owner: string | null, repo: string | null) {
+  return useSWR<GithubIssue[]>(
+    owner && repo ? `repo:issues:${owner}/${repo}` : null,
+    owner && repo
+      ? withCache(`repo:issues:${owner}/${repo}`, () =>
+          getRepoIssues(owner, repo),
+        )
+      : null,
+    OFFLINE_CONFIG,
+  );
+}
+
+/** Pull requests for a specific repository (lazy — pass `null` to skip). */
+export function useRepoPRs(owner: string | null, repo: string | null) {
+  return useSWR<GithubPR[]>(
+    owner && repo ? `repo:prs:${owner}/${repo}` : null,
+    owner && repo
+      ? withCache(`repo:prs:${owner}/${repo}`, () =>
+          getRepoPRs(owner, repo),
+        )
+      : null,
+    OFFLINE_CONFIG,
+  );
+}
+
+/** Contributors for a specific repository (lazy — pass `null` to skip). */
+export function useRepoContributors(owner: string | null, repo: string | null) {
+  return useSWR<GithubContributor[]>(
+    owner && repo ? `repo:contributors:${owner}/${repo}` : null,
+    owner && repo
+      ? withCache(`repo:contributors:${owner}/${repo}`, () =>
+          getRepoContributors(owner, repo),
+        )
       : null,
     OFFLINE_CONFIG,
   );

@@ -14,6 +14,11 @@ const CACHE_TTL: Record<string, number> = {
   repos: 120,
   activity: 60,
   orgs: 600,
+  "repo:readme": 600,
+  "repo:commits": 60,
+  "repo:issues": 90,
+  "repo:prs": 90,
+  "repo:contributors": 300,
 };
 
 const DEFAULT_TTL = 120;
@@ -42,8 +47,10 @@ async function getStore(): Promise<typeof storeInstance> {
 }
 
 function ttlForKey(key: string): number {
-  const prefix = key.split(":")[0] ?? key;
-  return CACHE_TTL[prefix] ?? DEFAULT_TTL;
+  const parts = key.split(":");
+  const twoSegment = parts.slice(0, 2).join(":");
+  const oneSegment = parts[0] ?? key;
+  return CACHE_TTL[twoSegment] ?? CACHE_TTL[oneSegment] ?? DEFAULT_TTL;
 }
 
 /**
