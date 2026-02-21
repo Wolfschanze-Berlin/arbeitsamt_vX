@@ -15,6 +15,7 @@ import {
   Terminal,
   Github,
   KanbanSquare,
+  Server,
   Settings,
   ChevronRight,
   type LucideIcon,
@@ -54,6 +55,7 @@ const mainNavItems: NavItem[] = [
     name: "Dashboard",
     subItems: [{ name: "Overview", path: "/" }],
   },
+  { icon: Server, name: "Servers", path: "/servers" },
   { icon: Terminal, name: "SSH Terminal", path: "/ssh" },
   {
     icon: Github,
