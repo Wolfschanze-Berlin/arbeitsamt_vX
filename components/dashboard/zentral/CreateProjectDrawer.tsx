@@ -92,7 +92,7 @@ export function CreateProjectDrawer({
       let repoFullName: string | null = null;
 
       if (mode === "link" && selectedRepo) {
-        repoUrl = selectedRepo.html_url;
+        repoUrl = selectedRepo.clone_url;
         repoFullName = selectedRepo.full_name;
       } else {
         // Create repo via GitHub API first
@@ -138,7 +138,7 @@ export function CreateProjectDrawer({
       // Close and navigate after a short pause
       setTimeout(() => {
         handleClose();
-        router.push(`/zentral?project=${entry.id}`);
+        router.push(`/zentral?id=${entry.id}&tab=overview`);
       }, 1200);
     } catch (e) {
       setCloneStatus("error");

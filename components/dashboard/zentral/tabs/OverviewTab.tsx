@@ -10,7 +10,6 @@ import {
   GitPullRequest,
   ExternalLink,
   Terminal,
-  Copy,
   Loader2,
   AlertCircle,
   FolderGit2,
@@ -117,31 +116,6 @@ export function OverviewTab({ project }: OverviewTabProps) {
         <FolderGit2 className="size-4" />
         <AlertDescription>No GitHub repo linked to this project.</AlertDescription>
       </Alert>
-    );
-  }
-
-  // --- Clone first screen ---
-  if (localPath === null) {
-    return (
-      <div className="flex flex-col items-center gap-4 py-12 text-center">
-        <Copy className="text-muted-foreground size-10" />
-        <div>
-          <p className="font-medium">Repository not cloned locally</p>
-          <p className="text-muted-foreground mt-1 text-sm">
-            Clone the repository to access local features.
-          </p>
-        </div>
-        <Button asChild variant="outline">
-          <a
-            href={`https://github.com/${repoFullName}`}
-            target="_blank"
-            rel="noreferrer"
-          >
-            <ExternalLink className="mr-2 size-4" />
-            View on GitHub
-          </a>
-        </Button>
-      </div>
     );
   }
 
@@ -257,7 +231,15 @@ export function OverviewTab({ project }: OverviewTabProps) {
           </a>
         </Button>
         <Button asChild variant="outline" size="sm">
-          <Link href="/ssh">
+          <Link href={
+            project.config?.servers?.[0]
+              ? `/ssh?host=${encodeURIComponent(project.config.servers[0].sshAlias)}&autoConnect=true${
+                  project.config.servers[0].repoPath
+                    ? `&path=${encodeURIComponent(project.config.servers[0].repoPath)}`
+                    : ""
+                }`
+              : "/ssh"
+          }>
             <Terminal className="mr-2 size-4" />
             Open in Terminal
           </Link>
