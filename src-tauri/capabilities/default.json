@@ -29,7 +29,12 @@
     "autostart:allow-is-enabled",
     "cli:default",
     "positioner:default",
-    "http:default",
+    {
+      "identifier": "http:default",
+      "allow": [
+        { "url": "https://api.github.com/**" }
+      ]
+    },
     "websocket:default",
     "upload:default",
     "sql:default",

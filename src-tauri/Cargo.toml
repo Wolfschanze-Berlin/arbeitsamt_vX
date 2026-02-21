@@ -55,6 +55,7 @@ uuid = { version = "1", features = ["v4"] }
 openssh-keys = "0.6"
 dirs = "6"
 portable-pty = "0.8"
+dotenvy = "0.15.7"
 
 # Tauri plugins — desktop only
 [target.'cfg(any(target_os = "macos", windows, target_os = "linux"))'.dependencies]

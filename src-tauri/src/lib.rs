@@ -16,6 +16,24 @@ fn greet(name: &str) -> String {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Load .env from the project root (one level up from src-tauri/).
+    // During `tauri dev`, CWD is often src-tauri/, so we resolve the
+    // parent directory to find the .env file at the project root.
+    let env_path = std::env::current_dir()
+        .map(|cwd| {
+            let candidate = cwd.join(".env");
+            if candidate.exists() {
+                candidate
+            } else {
+                // CWD is likely src-tauri/ — go up one level
+                cwd.parent()
+                    .map(|p| p.join(".env"))
+                    .unwrap_or(candidate)
+            }
+        })
+        .unwrap_or_else(|_| std::path::PathBuf::from(".env"));
+    let _ = dotenvy::from_path(&env_path);
+
     tauri::Builder::default()
         .setup(|app| {
             // === Desktop-only plugins (registered via setup) ===
@@ -127,6 +145,7 @@ pub fn run() {
             commands::pty::pty_write,
             commands::pty::pty_resize,
             commands::pty::pty_close,
+            commands::github::get_github_token,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
