@@ -44,13 +44,14 @@ export default function DashboardShell({
         >
           <SessionManager
             className="h-full"
-            renderConnectionDialog={({ open, onOpenChange, onConnect, isConnecting, error }) => (
+            renderConnectionDialog={({ open, onOpenChange, onConnect, isConnecting, error, initialHost }) => (
               <ConnectionDialog
                 open={open}
                 onOpenChange={onOpenChange}
                 onConnect={onConnect}
                 isConnecting={isConnecting}
                 error={error}
+                initialHost={initialHost}
               />
             )}
           />

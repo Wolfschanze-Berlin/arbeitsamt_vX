@@ -13,6 +13,7 @@ mod pty;
 mod commands;
 mod state;
 mod zentral;
+mod cloud;
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 #[tauri::command]
@@ -219,8 +220,20 @@ pub fn run() {
                 });
             }
 
-            // Show the main window (starts hidden to avoid flash while window-state restores)
+            // Size the window to 70% of the primary monitor on first launch.
+            // tauri_plugin_window_state will override this on subsequent launches
+            // if the user has repositioned/resized the window.
             let main_window = app.get_webview_window("main").expect("no main window");
+            if let Some(monitor) = main_window.primary_monitor().ok().flatten() {
+                let screen = monitor.size();
+                let scale = monitor.scale_factor();
+                let win_w = (screen.width as f64 / scale * 0.7) as f64;
+                let win_h = (screen.height as f64 / scale * 0.7) as f64;
+                let pos_x = (screen.width as f64 / scale - win_w) / 2.0;
+                let pos_y = (screen.height as f64 / scale - win_h) / 2.0;
+                let _ = main_window.set_size(tauri::LogicalSize::new(win_w, win_h));
+                let _ = main_window.set_position(tauri::LogicalPosition::new(pos_x, pos_y));
+            }
             main_window.show().unwrap();
 
             Ok(())
@@ -235,6 +248,18 @@ pub fn run() {
                 .build(),
         )
         .plugin(tauri_plugin_store::Builder::new().build())
+        .plugin(
+            tauri_plugin_stronghold::Builder::new(|password| {
+                use argon2::Argon2;
+                let salt = b"arbeitsamt-cloud-vault";
+                let mut output = vec![0u8; 32];
+                Argon2::default()
+                    .hash_password_into(password.as_ref(), salt, &mut output)
+                    .expect("failed to hash stronghold password");
+                output
+            })
+            .build(),
+        )
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_dialog::init())
@@ -269,6 +294,8 @@ pub fn run() {
             commands::ssh::ssh_check_agent,
             commands::ssh::ssh_list_agent_keys,
             commands::ssh::ssh_exec,
+            commands::ssh::ssh_probe_wsl,
+            commands::ssh::local_list_wsl_distros,
             commands::sftp::sftp_list_dir,
             commands::sftp::sftp_mkdir,
             commands::sftp::sftp_delete,
@@ -289,11 +316,23 @@ pub fn run() {
             commands::pty::pty_close,
             commands::github::get_github_token,
             commands::dashboard::ssh_get_metrics,
+            commands::dashboard::ssh_list_wsl_distros,
             commands::docker::ssh_docker_data,
             commands::docker::ssh_docker_logs,
+            commands::docker::ssh_docker_action,
+            commands::docker::ssh_docker_inspect,
             zentral::zentral_clone_project,
             zentral::zentral_import_local_path,
             zentral::zentral_scan_repos,
+            zentral::zentral_scan_remote_repos,
+            zentral::zentral_list_remote_dir,
+            commands::cloud::cloud_list_aws_profiles,
+            commands::cloud::cloud_add_account,
+            commands::cloud::cloud_add_manual_account,
+            commands::cloud::cloud_list_accounts,
+            commands::cloud::cloud_remove_account,
+            commands::cloud::cloud_list_instances,
+            commands::cloud::cloud_instance_action,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

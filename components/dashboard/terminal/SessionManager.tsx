@@ -2,10 +2,12 @@
 
 import {
   useCallback,
+  useEffect,
   useRef,
   useState,
   type ReactNode,
 } from "react";
+import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { SessionTabs, type SessionTab, type SessionType } from "./SessionTabs";
 import { TerminalView, type TerminalViewHandle } from "./TerminalView";
 import type { SSHConnectParams } from "@/hooks/useSSHSession";
@@ -29,6 +31,8 @@ interface SessionManagerProps {
     onConnect: (params: SSHConnectParams & { label?: string; color?: string }) => void;
     isConnecting: boolean;
     error?: string;
+    /** SSH alias from URL ?host= param — auto-resolves and pre-fills the dialog. */
+    initialHost?: string;
   }) => ReactNode;
   className?: string;
 }
@@ -48,6 +52,9 @@ function generateSessionId(): string {
 
 function SessionManager({ renderConnectionDialog, className }: SessionManagerProps) {
   const { theme } = useTheme();
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
 
   // ---- Session state ----
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -57,6 +64,9 @@ function SessionManager({ renderConnectionDialog, className }: SessionManagerPro
   const [dialogOpen, setDialogOpen] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [connectError, setConnectError] = useState<string | undefined>();
+
+  // ---- Pending host from URL ?host= param ----
+  const [pendingHost, setPendingHost] = useState<string | undefined>();
 
   // ---- Refs for TerminalView handles (keyed by session id) ----
   const terminalRefs = useRef<Map<string, TerminalViewHandle | null>>(new Map());
@@ -292,6 +302,90 @@ function SessionManager({ renderConnectionDialog, className }: SessionManagerPro
   );
 
   // ------------------------------------------------------------------
+  // Auto-connect from URL ?host= param (must be after handleConnect)
+  // ------------------------------------------------------------------
+
+  // Track whether we've already handled the current URL params
+  const handledUrlRef = useRef<string | null>(null);
+
+  // When ?host= is present on the /ssh route, either auto-connect or open dialog.
+  // IMPORTANT: Only react to ?host= on /ssh — other pages (e.g. /servers/detail)
+  // use ?host= for their own purposes and must not be hijacked.
+  useEffect(() => {
+    if (pathname !== "/ssh") return;
+
+    const host = searchParams.get("host");
+    if (!host) {
+      // URL was cleaned — reset guard so next navigation triggers again.
+      handledUrlRef.current = null;
+      return;
+    }
+
+    // Prevent double-handling within the same navigation (StrictMode / re-render).
+    const key = `${host}:${searchParams.get("autoConnect")}`;
+    if (handledUrlRef.current === key) return;
+    handledUrlRef.current = key;
+
+    const autoConnect = searchParams.get("autoConnect") === "true";
+    // Clear the query param so refreshing doesn't re-trigger
+    router.replace("/ssh", { scroll: false });
+
+    if (autoConnect) {
+      const initialPath = searchParams.get("path");
+      // Resolve SSH config and connect directly — no dialog
+      (async () => {
+        try {
+          const { tauriInvoke } = await import("@/lib/tauri");
+          const config = await tauriInvoke<{
+            hostname: string;
+            port: number;
+            user: string | null;
+            identityFile: string | null;
+          }>("ssh_resolve_config", { host });
+
+          const keys = await tauriInvoke<string[]>("ssh_discover_keys").catch(() => [] as string[]);
+          const keyPath = config.identityFile ?? (keys.length > 0 ? keys[0] : undefined);
+
+          await handleConnect({
+            host: config.hostname,
+            port: config.port,
+            username: config.user ?? "root",
+            authMethod: "keyfile",
+            keyPath,
+          });
+
+          // After connecting, cd into the project directory if a path was provided.
+          if (initialPath) {
+            // Small delay to let the shell initialize before sending cd.
+            setTimeout(() => {
+              const latest = sessionsRef.current;
+              const session = latest[latest.length - 1];
+              if (session?.tauriSessionId) {
+                const encoder = new TextEncoder();
+                const cdCmd = encoder.encode(`cd ${initialPath}\n`);
+                tauriInvoke("ssh_write", {
+                  sessionId: session.tauriSessionId,
+                  data: Array.from(cdCmd),
+                }).catch(() => {});
+              }
+            }, 500);
+          }
+        } catch {
+          // Resolve failed — fall back to opening the dialog with the alias pre-filled
+          setPendingHost(host);
+          setConnectError(undefined);
+          setDialogOpen(true);
+        }
+      })();
+    } else {
+      // Just open the dialog with the host pre-filled
+      setPendingHost(host);
+      setConnectError(undefined);
+      setDialogOpen(true);
+    }
+  }, [pathname, searchParams, router, handleConnect]);
+
+  // ------------------------------------------------------------------
   // Pop-out: detach session to a new Tauri window
   // ------------------------------------------------------------------
 
@@ -406,10 +500,14 @@ function SessionManager({ renderConnectionDialog, className }: SessionManagerPro
       {/* Connection dialog — only mount when open to avoid idle hook overhead */}
       {dialogOpen && renderConnectionDialog?.({
         open: dialogOpen,
-        onOpenChange: setDialogOpen,
+        onOpenChange: (open) => {
+          setDialogOpen(open);
+          if (!open) setPendingHost(undefined);
+        },
         onConnect: handleConnect,
         isConnecting,
         error: connectError,
+        initialHost: pendingHost,
       })}
     </div>
   );

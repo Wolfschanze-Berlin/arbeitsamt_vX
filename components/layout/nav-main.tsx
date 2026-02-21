@@ -4,20 +4,13 @@ import { usePathname } from "next/navigation";
 import Link from "next/link";
 import {
   LayoutDashboard,
-  Calendar,
-  UserCircle,
-  List,
-  Table2,
-  FileText,
-  PieChart,
-  Box,
-  Plug,
   Terminal,
   MessageSquare,
   Github,
   KanbanSquare,
   Layers,
   Server,
+  Cloud,
   Settings,
   ChevronRight,
   type LucideIcon,
@@ -59,6 +52,7 @@ const mainNavItems: NavItem[] = [
   },
   { icon: Layers, name: "Die Zentral", path: "/zentral" },
   { icon: Server, name: "Servers", path: "/servers" },
+  { icon: Cloud, name: "Cloud", path: "/cloud" },
   { icon: Terminal, name: "SSH Terminal", path: "/ssh" },
   { icon: MessageSquare, name: "Chat", path: "/chat" },
   {
@@ -67,59 +61,11 @@ const mainNavItems: NavItem[] = [
     subItems: [
       { name: "Overview", path: "/github" },
       { name: "Repositories", path: "/github/repos" },
+      { name: "Starred", path: "/github/starred" },
     ],
   },
   { icon: KanbanSquare, name: "Kanban", path: "/kanban" },
   { icon: Settings, name: "Settings", path: "/settings" },
-  { icon: Calendar, name: "Calendar", path: "/calendar" },
-  { icon: UserCircle, name: "User Profile", path: "/profile" },
-  {
-    icon: List,
-    name: "Forms",
-    subItems: [{ name: "Form Elements", path: "/form-elements" }],
-  },
-  {
-    icon: Table2,
-    name: "Tables",
-    subItems: [{ name: "Basic Tables", path: "/basic-tables" }],
-  },
-  {
-    icon: FileText,
-    name: "Pages",
-    subItems: [
-      { name: "Blank Page", path: "/blank" },
-      { name: "404 Error", path: "/error-404" },
-    ],
-  },
-];
-
-const othersNavItems: NavItem[] = [
-  { icon: Terminal, name: "Greet Demo", path: "/greet" },
-  {
-    icon: PieChart,
-    name: "Charts",
-    subItems: [
-      { name: "Line Chart", path: "/line-chart" },
-      { name: "Bar Chart", path: "/bar-chart" },
-    ],
-  },
-  {
-    icon: Box,
-    name: "UI Elements",
-    subItems: [
-      { name: "Alerts", path: "/alerts" },
-      { name: "Buttons", path: "/buttons" },
-      { name: "Badge", path: "/badge" },
-    ],
-  },
-  {
-    icon: Plug,
-    name: "Authentication",
-    subItems: [
-      { name: "Sign In", path: "/signin" },
-      { name: "Sign Up", path: "/signup" },
-    ],
-  },
 ];
 
 function NavItemComponent({ item }: { item: NavItem }) {
@@ -177,16 +123,6 @@ export function NavMain() {
         <SidebarGroupContent>
           <SidebarMenu>
             {mainNavItems.map((item) => (
-              <NavItemComponent key={item.name} item={item} />
-            ))}
-          </SidebarMenu>
-        </SidebarGroupContent>
-      </SidebarGroup>
-      <SidebarGroup>
-        <SidebarGroupLabel>Others</SidebarGroupLabel>
-        <SidebarGroupContent>
-          <SidebarMenu>
-            {othersNavItems.map((item) => (
               <NavItemComponent key={item.name} item={item} />
             ))}
           </SidebarMenu>

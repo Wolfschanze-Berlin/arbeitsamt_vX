@@ -102,6 +102,8 @@ interface ConnectionDialogProps {
   error?: string;
   /** Pre-select a saved profile by ID */
   profileId?: string;
+  /** SSH config alias to auto-resolve and pre-fill on open (from URL ?host=). */
+  initialHost?: string;
 }
 
 function ConnectionDialog({
@@ -111,6 +113,7 @@ function ConnectionDialog({
   isConnecting = false,
   error,
   profileId,
+  initialHost,
 }: ConnectionDialogProps) {
   const { settings } = useSettings();
   const [configHosts, setConfigHosts] = useState<string[]>([]);
@@ -145,6 +148,40 @@ function ConnectionDialog({
       form.setValue("keyPath", profile.authMethod.keyPath, { shouldValidate: true });
     }
   }, [open, profileId, savedProfiles, form]);
+
+  // Auto-resolve an SSH alias passed via URL ?host= param
+  useEffect(() => {
+    if (!open || !initialHost) return;
+    let cancelled = false;
+
+    async function resolveInitialHost() {
+      try {
+        const { tauriInvoke } = await import("@/lib/tauri");
+        const config = await tauriInvoke<ResolvedSshConfig>("ssh_resolve_config", { host: initialHost });
+        if (cancelled) return;
+
+        form.setValue("host", config.hostname, { shouldValidate: true });
+        form.setValue("port", config.port, { shouldValidate: true });
+        if (config.user) {
+          form.setValue("username", config.user, { shouldValidate: true });
+        }
+
+        const keyPath = config.identityFile ?? await discoverDefaultKey();
+        if (keyPath) {
+          form.setValue("authMethod", "keyfile");
+          form.setValue("keyPath", keyPath, { shouldValidate: true });
+        }
+      } catch {
+        // Resolve failed — fill alias as hostname fallback
+        if (!cancelled) {
+          form.setValue("host", initialHost!, { shouldValidate: true });
+        }
+      }
+    }
+
+    resolveInitialHost();
+    return () => { cancelled = true; };
+  }, [open, initialHost, form]);
 
   function handleProfileQuickConnect(id: string) {
     const profile = savedProfiles.find((p) => p.id === id);
