@@ -353,8 +353,8 @@ function SessionManager({ renderConnectionDialog, className }: SessionManagerPro
         ))}
       </div>
 
-      {/* Connection dialog (rendered via prop or default) */}
-      {renderConnectionDialog?.({
+      {/* Connection dialog — only mount when open to avoid idle hook overhead */}
+      {dialogOpen && renderConnectionDialog?.({
         open: dialogOpen,
         onOpenChange: setDialogOpen,
         onConnect: handleConnect,

@@ -6,7 +6,7 @@ import {
   useImperativeHandle,
   forwardRef,
   useCallback,
-  type RefObject,
+  memo,
 } from "react";
 
 // ---------------------------------------------------------------------------
@@ -87,7 +87,7 @@ const LIGHT_THEME = {
 // Component
 // ---------------------------------------------------------------------------
 
-export const TerminalView = forwardRef<TerminalViewHandle, TerminalViewProps>(
+export const TerminalView = memo(forwardRef<TerminalViewHandle, TerminalViewProps>(
   function TerminalView(
     {
       sessionId,
@@ -342,4 +342,4 @@ export const TerminalView = forwardRef<TerminalViewHandle, TerminalViewProps>(
       />
     );
   },
-);
+));

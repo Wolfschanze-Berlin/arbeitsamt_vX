@@ -1,6 +1,6 @@
 "use client";
 
-import { Palette, Terminal, ServerCog, RefreshCw } from "lucide-react";
+import { Palette, Terminal, ServerCog, RefreshCw, KeyRound } from "lucide-react";
 import {
   SettingsLayout,
   type SettingsSection,
@@ -9,6 +9,7 @@ import { AppearanceSettings } from "@/components/dashboard/settings/sections/App
 import { SshProfilesSettings } from "@/components/dashboard/settings/sections/SshProfilesSettings";
 import { TerminalSettings } from "@/components/dashboard/settings/sections/TerminalSettings";
 import { UpdatesSettings } from "@/components/dashboard/settings/sections/UpdatesSettings";
+import { ApiTokensSettings } from "@/components/dashboard/settings/sections/ApiTokensSettings";
 
 const sections: SettingsSection[] = [
   {
@@ -28,6 +29,12 @@ const sections: SettingsSection[] = [
     label: "Terminal",
     icon: Terminal,
     component: <TerminalSettings />,
+  },
+  {
+    id: "api-tokens",
+    label: "API Keys",
+    icon: KeyRound,
+    component: <ApiTokensSettings />,
   },
   {
     id: "updates",

@@ -36,11 +36,33 @@ export interface TerminalSettings {
   colorPreset: ColorPreset;
 }
 
+export interface ApiToken {
+  id: string;
+  key: string;
+  value: string;
+  description?: string;
+  isCustom: boolean;
+}
+
+export const PREDEFINED_TOKENS: Omit<ApiToken, "id" | "value">[] = [
+  {
+    key: "GITHUB_TOKEN",
+    description: "GitHub personal access token for API integration",
+    isCustom: false,
+  },
+  {
+    key: "OPENAI_API_KEY",
+    description: "OpenAI API key for AI-powered features",
+    isCustom: false,
+  },
+];
+
 export interface AppSettings {
   theme: Theme;
   terminal: TerminalSettings;
   sshProfiles: SshProfile[];
   checkUpdatesOnLaunch: boolean;
+  apiTokens: ApiToken[];
 }
 
 // --- Defaults ---
@@ -58,6 +80,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   terminal: { ...DEFAULT_TERMINAL_SETTINGS },
   sshProfiles: [],
   checkUpdatesOnLaunch: true,
+  apiTokens: [],
 };
 
 // --- Terminal Color Presets ---
@@ -207,6 +230,7 @@ export async function loadSettings(): Promise<AppSettings> {
       ...(stored.terminal ?? {}),
     },
     sshProfiles: stored.sshProfiles ?? [],
+    apiTokens: stored.apiTokens ?? [],
   };
 }
 

@@ -6,9 +6,11 @@ import {
   useState,
   useEffect,
   useCallback,
+  useMemo,
   type ReactNode,
 } from "react";
 import {
+  type ApiToken,
   type AppSettings,
   type SshProfile,
   type TerminalSettings,
@@ -28,6 +30,9 @@ interface SettingsContextType {
   updateProfile: (profile: SshProfile) => void;
   removeProfile: (id: string) => void;
   getProfile: (id: string) => SshProfile | undefined;
+  addToken: (token: ApiToken) => void;
+  updateToken: (token: ApiToken) => void;
+  removeToken: (id: string) => void;
 }
 
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
@@ -104,20 +109,65 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     [settings.sshProfiles],
   );
 
+  const addToken = useCallback((token: ApiToken) => {
+    setSettings((prev) => {
+      const next = [...prev.apiTokens, token];
+      saveSetting("apiTokens", next);
+      return { ...prev, apiTokens: next };
+    });
+  }, []);
+
+  const updateToken = useCallback((token: ApiToken) => {
+    setSettings((prev) => {
+      const next = prev.apiTokens.map((t) =>
+        t.id === token.id ? token : t,
+      );
+      saveSetting("apiTokens", next);
+      return { ...prev, apiTokens: next };
+    });
+  }, []);
+
+  const removeToken = useCallback((id: string) => {
+    setSettings((prev) => {
+      const next = prev.apiTokens.filter((t) => t.id !== id);
+      saveSetting("apiTokens", next);
+      return { ...prev, apiTokens: next };
+    });
+  }, []);
+
+  const contextValue = useMemo<SettingsContextType>(
+    () => ({
+      settings,
+      isLoaded,
+      updateTheme,
+      updateTerminal,
+      updateCheckUpdatesOnLaunch,
+      addProfile,
+      updateProfile,
+      removeProfile,
+      getProfile,
+      addToken,
+      updateToken,
+      removeToken,
+    }),
+    [
+      settings,
+      isLoaded,
+      updateTheme,
+      updateTerminal,
+      updateCheckUpdatesOnLaunch,
+      addProfile,
+      updateProfile,
+      removeProfile,
+      getProfile,
+      addToken,
+      updateToken,
+      removeToken,
+    ],
+  );
+
   return (
-    <SettingsContext.Provider
-      value={{
-        settings,
-        isLoaded,
-        updateTheme,
-        updateTerminal,
-        updateCheckUpdatesOnLaunch,
-        addProfile,
-        updateProfile,
-        removeProfile,
-        getProfile,
-      }}
-    >
+    <SettingsContext.Provider value={contextValue}>
       {children}
     </SettingsContext.Provider>
   );

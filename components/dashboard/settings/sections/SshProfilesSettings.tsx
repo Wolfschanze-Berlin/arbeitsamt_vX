@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useSettings } from "@/context/settings-context";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -42,8 +42,16 @@ import {
   PROFILE_COLOR_TAGS,
 } from "@/lib/settings";
 import { tauriInvoke } from "@/lib/tauri";
-import { Plus, MoreHorizontal, Pencil, Trash2, FolderOpen } from "lucide-react";
+import { Plus, MoreHorizontal, Pencil, Trash2, FolderOpen, Monitor } from "lucide-react";
 import { useRouter } from "next/navigation";
+
+interface SshConfigEntry {
+  alias: string;
+  hostname: string;
+  port: number;
+  user: string | null;
+  identityFile: string | null;
+}
 
 function generateId() {
   return crypto.randomUUID();
@@ -65,6 +73,7 @@ export function SshProfilesSettings() {
   const [editDialog, setEditDialog] = useState(false);
   const [deleteDialog, setDeleteDialog] = useState<string | null>(null);
   const [editingProfile, setEditingProfile] = useState<SshProfile | null>(null);
+  const [configEntries, setConfigEntries] = useState<SshConfigEntry[]>([]);
 
   function handleNew() {
     setEditingProfile({ id: generateId(), ...EMPTY_PROFILE });
@@ -116,7 +125,62 @@ export function SshProfilesSettings() {
     }
   }
 
+  // Auto-fetch SSH config hosts on mount
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const hosts = await tauriInvoke<string[]>("ssh_list_config_hosts");
+        if (cancelled) return;
+        const resolved = await Promise.all(
+          hosts.map(async (alias) => {
+            try {
+              const cfg = await tauriInvoke<{
+                hostname: string;
+                port: number;
+                user: string | null;
+                identityFile: string | null;
+              }>("ssh_resolve_config", { host: alias });
+              return { alias, ...cfg };
+            } catch {
+              return { alias, hostname: alias, port: 22, user: null, identityFile: null };
+            }
+          }),
+        );
+        if (!cancelled) setConfigEntries(resolved);
+      } catch {
+        // Not in Tauri or no SSH config — silently ignore
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const handleImportEntry = useCallback(
+    (entry: SshConfigEntry) => {
+      const authMethod: ProfileAuthMethod = entry.identityFile
+        ? { method: "keyfile", keyPath: entry.identityFile }
+        : { method: "agent" };
+
+      setEditingProfile({
+        id: generateId(),
+        name: entry.alias,
+        host: entry.hostname,
+        port: entry.port,
+        username: entry.user ?? "",
+        authMethod,
+        colorTag: null,
+      });
+      setEditDialog(true);
+    },
+    [],
+  );
+
   const profiles = settings.sshProfiles;
+
+  // Filter config entries to only show hosts not already saved
+  const availableConfigHosts = configEntries.filter(
+    (entry) => !profiles.some((p) => p.host === entry.hostname && p.port === entry.port),
+  );
 
   return (
     <div className="space-y-4">
@@ -379,6 +443,37 @@ export function SshProfilesSettings() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Auto-discovered SSH Config Hosts */}
+      {availableConfigHosts.length > 0 && (
+        <div className="space-y-3 pt-2">
+          <div className="flex items-center gap-2">
+            <Monitor className="size-4 text-muted-foreground" />
+            <p className="text-sm font-medium">From ~/.ssh/config</p>
+          </div>
+          <div className="grid gap-2">
+            {availableConfigHosts.map((entry) => (
+              <button
+                key={entry.alias}
+                type="button"
+                onClick={() => handleImportEntry(entry)}
+                className="flex items-center gap-3 rounded-lg border border-dashed p-3 text-left transition-colors hover:bg-accent hover:border-solid"
+              >
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">
+                    {entry.alias}
+                  </p>
+                  <p className="text-xs text-muted-foreground truncate">
+                    {entry.user ? `${entry.user}@` : ""}
+                    {entry.hostname}:{entry.port}
+                  </p>
+                </div>
+                <Plus className="size-4 text-muted-foreground" />
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
