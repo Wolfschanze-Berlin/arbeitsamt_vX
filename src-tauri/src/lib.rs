@@ -1,5 +1,10 @@
 use tauri::Manager;
 
+#[cfg(desktop)]
+use tauri::menu::{AboutMetadata, MenuBuilder, MenuItemBuilder, SubmenuBuilder};
+#[cfg(desktop)]
+use tauri::Emitter;
+
 mod error;
 mod ssh;
 mod sftp;
@@ -80,6 +85,139 @@ pub fn run() {
             // app.handle()
             //     .plugin(tauri_plugin_updater::Builder::new().build())?;
 
+            // === Native Menu ===
+            #[cfg(desktop)]
+            {
+                let file_menu = SubmenuBuilder::new(app, "File")
+                    .item(&MenuItemBuilder::with_id("new-window", "New Window").build(app)?)
+                    .separator()
+                    .quit()
+                    .build()?;
+
+                let edit_menu = SubmenuBuilder::new(app, "Edit")
+                    .undo()
+                    .redo()
+                    .separator()
+                    .cut()
+                    .copy()
+                    .paste()
+                    .select_all()
+                    .build()?;
+
+                let view_menu = SubmenuBuilder::new(app, "View")
+                    .item(
+                        &MenuItemBuilder::with_id("zoom-in", "Zoom In")
+                            .accelerator("CmdOrCtrl+=")
+                            .build(app)?,
+                    )
+                    .item(
+                        &MenuItemBuilder::with_id("zoom-out", "Zoom Out")
+                            .accelerator("CmdOrCtrl+-")
+                            .build(app)?,
+                    )
+                    .item(
+                        &MenuItemBuilder::with_id("zoom-reset", "Reset Zoom")
+                            .accelerator("CmdOrCtrl+0")
+                            .build(app)?,
+                    )
+                    .separator()
+                    .item(
+                        &MenuItemBuilder::with_id("fullscreen", "Toggle Fullscreen")
+                            .accelerator("F11")
+                            .build(app)?,
+                    )
+                    .build()?;
+
+                let navigate_menu = SubmenuBuilder::new(app, "Navigate")
+                    .item(
+                        &MenuItemBuilder::with_id("nav-dashboard", "Dashboard")
+                            .accelerator("CmdOrCtrl+1")
+                            .build(app)?,
+                    )
+                    .item(
+                        &MenuItemBuilder::with_id("nav-ssh", "SSH Terminal")
+                            .accelerator("CmdOrCtrl+2")
+                            .build(app)?,
+                    )
+                    .item(
+                        &MenuItemBuilder::with_id("nav-github", "GitHub")
+                            .accelerator("CmdOrCtrl+3")
+                            .build(app)?,
+                    )
+                    .item(
+                        &MenuItemBuilder::with_id("nav-kanban", "Kanban")
+                            .accelerator("CmdOrCtrl+4")
+                            .build(app)?,
+                    )
+                    .separator()
+                    .item(
+                        &MenuItemBuilder::with_id("nav-settings", "Settings")
+                            .accelerator("CmdOrCtrl+,")
+                            .build(app)?,
+                    )
+                    .build()?;
+
+                let tools_menu = SubmenuBuilder::new(app, "Tools")
+                    .item(
+                        &MenuItemBuilder::with_id("new-ssh", "New SSH Connection")
+                            .accelerator("CmdOrCtrl+N")
+                            .build(app)?,
+                    )
+                    .item(
+                        &MenuItemBuilder::with_id("toggle-theme", "Toggle Theme")
+                            .accelerator("CmdOrCtrl+T")
+                            .build(app)?,
+                    )
+                    .build()?;
+
+                let help_menu = SubmenuBuilder::new(app, "Help")
+                    .about(Some(AboutMetadata {
+                        name: Some("arbeitsamt".to_string()),
+                        ..Default::default()
+                    }))
+                    .build()?;
+
+                let menu = MenuBuilder::new(app)
+                    .items(&[
+                        &file_menu,
+                        &edit_menu,
+                        &view_menu,
+                        &navigate_menu,
+                        &tools_menu,
+                        &help_menu,
+                    ])
+                    .build()?;
+
+                app.set_menu(menu)?;
+
+                app.on_menu_event(move |app_handle, event| {
+                    let id = event.id().0.as_str();
+                    match id {
+                        // Navigation events — emitted to frontend for client-side routing
+                        "nav-dashboard" | "nav-ssh" | "nav-github" | "nav-kanban"
+                        | "nav-settings" => {
+                            let _ = app_handle.emit("menu-navigate", id);
+                        }
+                        // Tools
+                        "new-ssh" => {
+                            let _ = app_handle.emit("menu-action", "new-ssh");
+                        }
+                        "toggle-theme" => {
+                            let _ = app_handle.emit("menu-action", "toggle-theme");
+                        }
+                        // View controls
+                        "zoom-in" | "zoom-out" | "zoom-reset" | "fullscreen" => {
+                            let _ = app_handle.emit("menu-action", id);
+                        }
+                        // New window
+                        "new-window" => {
+                            let _ = app_handle.emit("menu-action", "new-window");
+                        }
+                        _ => {}
+                    }
+                });
+            }
+
             // Show the main window (starts hidden to avoid flash while window-state restores)
             let main_window = app.get_webview_window("main").expect("no main window");
             main_window.show().unwrap();
@@ -116,6 +254,7 @@ pub fn run() {
             commands::ssh::ssh_connect,
             commands::ssh::ssh_write,
             commands::ssh::ssh_resize,
+            commands::ssh::ssh_reattach_output,
             commands::ssh::ssh_disconnect,
             commands::ssh::ssh_list_sessions,
             commands::ssh::ssh_save_profile,
