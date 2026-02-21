@@ -57,6 +57,17 @@ dirs = "6"
 portable-pty = "0.8"
 dotenvy = "0.15.7"
 
+# AWS SDK — cloud management
+aws-config = { version = "1", features = ["behavior-version-latest"] }
+aws-sdk-ec2 = "1"
+aws-sdk-sts = "1"
+aws-types = "1"
+aws-credential-types = "1"
+
+# Stronghold — encrypted secret storage for cloud credentials
+tauri-plugin-stronghold = "2"
+argon2 = "0.5"
+
 # Tauri plugins — desktop only
 [target.'cfg(any(target_os = "macos", windows, target_os = "linux"))'.dependencies]
 tauri-plugin-single-instance = "2"

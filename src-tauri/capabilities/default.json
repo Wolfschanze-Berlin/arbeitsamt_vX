@@ -16,12 +16,30 @@
     "os:default",
     "dialog:default",
     "fs:default",
+    "fs:allow-read-dir",
+    {
+      "identifier": "fs:scope",
+      "allow": [
+        { "path": "$HOME/**" }
+      ]
+    },
     "clipboard-manager:allow-read-text",
     "clipboard-manager:allow-write-text",
     "clipboard-manager:allow-read-image",
     "clipboard-manager:allow-write-image",
     "notification:default",
     "shell:default",
+    {
+      "identifier": "shell:allow-execute",
+      "allow": [
+        {
+          "name": "code-insiders",
+          "cmd": "code-insiders.cmd",
+          "args": true,
+          "sidecar": false
+        }
+      ]
+    },
     "global-shortcut:allow-is-registered",
     "global-shortcut:allow-register",
     "global-shortcut:allow-unregister",
@@ -52,6 +70,7 @@
     "core:window:allow-close",
     "core:window:allow-set-title",
     "core:webview:allow-create-webview-window",
-    "core:menu:default"
+    "core:menu:default",
+    "stronghold:default"
   ]
 }
