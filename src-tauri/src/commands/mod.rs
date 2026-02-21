@@ -5,3 +5,4 @@ pub mod pty;
 pub mod github;
 pub mod dashboard;
 pub mod docker;
+pub mod cloud;
