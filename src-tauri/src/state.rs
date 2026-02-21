@@ -1,6 +1,7 @@
 use dashmap::DashMap;
 use tokio_util::sync::CancellationToken;
 
+use crate::commands::dashboard::MetricsSnapshot;
 use crate::pty::manager::PtyManager;
 use crate::ssh::manager::SshManager;
 use crate::tunnel::local::TunnelInfo;
@@ -15,6 +16,8 @@ pub struct AppState {
     pub tunnel_infos: DashMap<String, TunnelInfo>,
     /// Local PTY session manager.
     pub pty_manager: PtyManager,
+    /// Previous metrics snapshots for delta computation, keyed by session_id.
+    pub metrics_snapshots: DashMap<String, MetricsSnapshot>,
 }
 
 impl AppState {
@@ -25,6 +28,7 @@ impl AppState {
             tunnel_cancels: DashMap::new(),
             tunnel_infos: DashMap::new(),
             pty_manager: PtyManager::new(),
+            metrics_snapshots: DashMap::new(),
         }
     }
 }
