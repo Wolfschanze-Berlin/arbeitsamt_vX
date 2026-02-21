@@ -43,7 +43,7 @@ export function ServerCard({
   return (
     <Card
       className="cursor-pointer transition-colors hover:bg-accent/50"
-      onClick={() => router.push(`/servers/${alias}`)}
+      onClick={() => router.push(`/servers/detail?host=${encodeURIComponent(alias)}`)}
     >
       <CardHeader className="flex-row items-center justify-between pb-0">
         <CardTitle className="truncate text-base">{alias}</CardTitle>

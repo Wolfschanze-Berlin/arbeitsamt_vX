@@ -1,5 +1,6 @@
 "use client";
 
+import { useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 
 const ServerDetailShell = dynamic(
@@ -10,12 +11,11 @@ const ServerDetailShell = dynamic(
   { ssr: false },
 );
 
-interface ServerDetailClientProps {
-  host: string;
-}
+export default function ServerDetailPage() {
+  const searchParams = useSearchParams();
+  const host = searchParams.get("host") ?? "";
 
-function ServerDetailClient({ host }: ServerDetailClientProps) {
+  if (!host) return null;
+
   return <ServerDetailShell host={host} />;
 }
-
-export { ServerDetailClient };
