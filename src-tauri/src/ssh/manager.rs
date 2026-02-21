@@ -20,11 +20,12 @@ pub struct ConnectionInfo {
 }
 
 /// Commands sent to the TerminalActor
-#[derive(Debug)]
 pub enum TerminalCommand {
     Data(Vec<u8>),
     Resize { cols: u16, rows: u16 },
     Close,
+    /// Replace the output channel (used when popping out to a new window).
+    ReattachOutput(tauri::ipc::Channel<Vec<u8>>),
 }
 
 /// An active SSH connection entry in the session map
@@ -132,6 +133,24 @@ impl SshManager {
             .iter()
             .map(|entry| entry.info.clone())
             .collect()
+    }
+
+    /// Replace the output channel for a running session.
+    /// Used when popping out a session into a new window — the new window
+    /// supplies a fresh `Channel` so data flows directly to it.
+    pub fn reattach_output(
+        &self,
+        session_id: &str,
+        output: tauri::ipc::Channel<Vec<u8>>,
+    ) -> Result<(), SshError> {
+        let session = self
+            .sessions
+            .get(session_id)
+            .ok_or_else(|| SshError::SessionNotFound(session_id.to_string()))?;
+        session
+            .cmd_tx
+            .send(TerminalCommand::ReattachOutput(output))
+            .map_err(|_| SshError::ChannelClosed("Terminal actor stopped".to_string()))
     }
 
     /// Generate a new unique session ID.

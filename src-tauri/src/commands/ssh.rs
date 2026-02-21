@@ -179,6 +179,17 @@ pub async fn ssh_resize(
     state.ssh_manager.resize(&session_id, cols, rows)
 }
 
+/// Replace the output channel for a running SSH session.
+/// Called by a pop-out window to redirect terminal data to itself.
+#[tauri::command]
+pub async fn ssh_reattach_output(
+    state: State<'_, AppState>,
+    session_id: String,
+    output: Channel<Vec<u8>>,
+) -> Result<(), SshError> {
+    state.ssh_manager.reattach_output(&session_id, output)
+}
+
 /// Disconnect an SSH session.
 #[tauri::command]
 pub async fn ssh_disconnect(

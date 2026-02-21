@@ -124,6 +124,13 @@ impl<S: From<(russh::ChannelId, ChannelMsg)> + Send + Sync + 'static> TerminalAc
                                 );
                             }
                         }
+                        Some(TerminalCommand::ReattachOutput(new_output)) => {
+                            log::info!(
+                                "TerminalActor {}: reattaching output channel",
+                                self.session_id
+                            );
+                            self.output = new_output;
+                        }
                         Some(TerminalCommand::Close) => {
                             let _ = self.write_half.close().await;
                             break;
