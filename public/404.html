@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Redirecting...</title>
+    <script>
+      // SPA fallback for Tauri's custom protocol.
+      // When a route has no matching HTML file, Tauri serves this 404.html.
+      // We redirect to the root so the Next.js client-side router takes over.
+      window.location.replace("/");
+    </script>
+  </head>
+  <body></body>
+</html>
